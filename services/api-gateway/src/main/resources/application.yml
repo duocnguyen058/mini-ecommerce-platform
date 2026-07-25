@@ -1,0 +1,46 @@
+spring:
+  application:
+    name: api-gateway
+  cloud:
+    gateway:
+      server:
+        webflux:
+          httpclient:
+            connect-timeout: ${GATEWAY_CONNECT_TIMEOUT_MS:3000}
+            response-timeout: ${GATEWAY_RESPONSE_TIMEOUT:5s}
+          routes:
+            - id: catalog-service
+              uri: ${CATALOG_SERVICE_URL:http://localhost:8082}
+              predicates:
+                - Path=/api/products,/api/products/**,/api/categories,/api/categories/**,/api/admin/products,/api/admin/products/**,/api/admin/categories,/api/admin/categories/**
+          globalcors:
+            cors-configurations:
+              "[/**]":
+                allowed-origins:
+                  - ${FRONTEND_ORIGIN:http://localhost:5173}
+                allowed-methods:
+                  - GET
+                  - POST
+                  - PUT
+                  - PATCH
+                  - DELETE
+                  - OPTIONS
+                allowed-headers:
+                  - "*"
+                exposed-headers:
+                  - Location
+                  - X-Correlation-Id
+                allow-credentials: true
+                max-age: 3600
+
+server:
+  port: ${SERVER_PORT:8080}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      show-details: always
