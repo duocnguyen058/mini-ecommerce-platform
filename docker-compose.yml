@@ -1,0 +1,232 @@
+name: mini-ecommerce
+
+services:
+  # ==================== HẠ TẦNG ====================
+  postgres:
+    image: postgres:16.14-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-ecommerce}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ecommerce_local}
+      POSTGRES_DB: ${POSTGRES_DB:-postgres}
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5433}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infrastructure/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  redis:
+    image: redis:7.4.9-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  rabbitmq:
+    image: rabbitmq:4.3.3-management-alpine
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-ecommerce}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-ecommerce_local}
+    ports:
+      - "127.0.0.1:5672:5672"
+      - "127.0.0.1:15672:15672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  # ==================== BACKEND ====================
+  # Build context = thư mục gốc repo (chứa pom aggregator + services/)
+  # Mỗi service có Dockerfile riêng trong services/<service>/Dockerfile
+
+  identity-service:
+    build:
+      context: .
+      dockerfile: services/identity-service/Dockerfile
+    image: mini-ecommerce/identity-service:latest
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      # identity-service vẫn hardcode trong application.properties — override qua SPRING_*
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/identity_db
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-ecommerce}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-ecommerce_local}
+      SERVER_PORT: 8081
+    ports:
+      - "127.0.0.1:${IDENTITY_SERVER_PORT:-8081}:8081"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8081/actuator/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+
+  catalog-service:
+    build:
+      context: .
+      dockerfile: services/catalog-service/Dockerfile
+    image: mini-ecommerce/catalog-service:latest
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      CATALOG_DB_URL: jdbc:postgresql://postgres:5432/catalog_db
+      CATALOG_DB_USERNAME: ${POSTGRES_USER:-ecommerce}
+      CATALOG_DB_PASSWORD: ${POSTGRES_PASSWORD:-ecommerce_local}
+      SERVER_PORT: 8082
+    ports:
+      - "127.0.0.1:${CATALOG_SERVER_PORT:-8082}:8082"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8082/actuator/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 45s
+
+  inventory-service:
+    build:
+      context: .
+      dockerfile: services/inventory-service/Dockerfile
+    image: mini-ecommerce/inventory-service:latest
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      INVENTORY_DB_URL: jdbc:postgresql://postgres:5432/inventory_db
+      INVENTORY_DB_USERNAME: ${POSTGRES_USER:-ecommerce}
+      INVENTORY_DB_PASSWORD: ${POSTGRES_PASSWORD:-ecommerce_local}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USERNAME: ${RABBITMQ_USER:-ecommerce}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-ecommerce_local}
+      SERVER_PORT: 8083
+    ports:
+      - "127.0.0.1:${INVENTORY_SERVER_PORT:-8083}:8083"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8083/actuator/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 45s
+
+  cart-service:
+    build:
+      context: .
+      dockerfile: services/cart-service/Dockerfile
+    image: mini-ecommerce/cart-service:latest
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      SERVER_PORT: 8084
+    ports:
+      - "127.0.0.1:${CART_SERVER_PORT:-8084}:8084"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8084/actuator/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 45s
+
+  order-service:
+    build:
+      context: .
+      dockerfile: services/order-service/Dockerfile
+    image: mini-ecommerce/order-service:latest
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      ORDER_DB_URL: jdbc:postgresql://postgres:5432/order_db
+      ORDER_DB_USERNAME: ${POSTGRES_USER:-ecommerce}
+      ORDER_DB_PASSWORD: ${POSTGRES_PASSWORD:-ecommerce_local}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USERNAME: ${RABBITMQ_USER:-ecommerce}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-ecommerce_local}
+      # Order gọi downstream qua mạng Docker (tên service trong compose)
+      CATALOG_SERVICE_URL: http://catalog-service:8082
+      INVENTORY_SERVICE_URL: http://inventory-service:8083
+      CART_SERVICE_URL: http://cart-service:8084
+      OUTBOX_POLL_INTERVAL_MS: 1000
+      OUTBOX_BATCH_SIZE: 50
+      SERVER_PORT: 8085
+    ports:
+      - "127.0.0.1:${ORDER_SERVER_PORT:-8085}:8085"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8085/actuator/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+
+  api-gateway:
+    build:
+      context: .
+      dockerfile: services/api-gateway/Dockerfile
+    image: mini-ecommerce/api-gateway:latest
+    restart: unless-stopped
+    depends_on:
+      identity-service:
+        condition: service_healthy
+      catalog-service:
+        condition: service_healthy
+      inventory-service:
+        condition: service_healthy
+      cart-service:
+        condition: service_healthy
+      order-service:
+        condition: service_healthy
+    environment:
+      CATALOG_SERVICE_URL: http://catalog-service:8082
+      IDENTITY_SERVICE_URL: http://identity-service:8081
+      INVENTORY_SERVICE_URL: http://inventory-service:8083
+      CART_SERVICE_URL: http://cart-service:8084
+      ORDER_SERVICE_URL: http://order-service:8085
+      GATEWAY_CONNECT_TIMEOUT_MS: 3000
+      GATEWAY_RESPONSE_TIMEOUT: 5s
+      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:5173}
+      SERVER_PORT: 8080
+    ports:
+      - "127.0.0.1:${GATEWAY_SERVER_PORT:-8080}:8080"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/actuator/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+
+volumes:
+  postgres_data:
+  redis_data:
+  rabbitmq_data:

@@ -1,0 +1,35 @@
+# Bỏ qua các file không cần build trong Docker context
+# (giảm kích thước context + tránh cache mismatch)
+
+# Maven build outputs
+**/target/
+**/.mvn/
+**/mvnw
+**/mvnw.cmd
+
+# IDE
+**/.idea/
+**/.vscode/
+**/.eclipse
+**/.settings/
+**/.project
+**/.classpath
+**/*.iml
+
+# OS / editor
+**/.DS_Store
+**/Thumbs.db
+**/*~
+
+# Git
+.git/
+.gitignore
+**/.gitkeep
+
+# Document / docs
+docs/
+**/*.md
+!**/README.md
+
+# ZCode / plans
+.zcode/
