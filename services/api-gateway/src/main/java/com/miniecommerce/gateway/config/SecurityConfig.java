@@ -9,6 +9,7 @@ import org.springframework.security.web.server.SecurityWebFilterChain;
 public class SecurityConfig {
 
 	@Bean
+	@SuppressWarnings("null")
 	SecurityWebFilterChain securityWebFilterChain(ServerHttpSecurity http) {
 		return http
 			.csrf(ServerHttpSecurity.CsrfSpec::disable)

@@ -7,17 +7,35 @@ spring:
         webflux:
           httpclient:
             connect-timeout: ${GATEWAY_CONNECT_TIMEOUT_MS:3000}
-            response-timeout: ${GATEWAY_RESPONSE_TIMEOUT:5s}
+            response-timeout: ${GATEWAY_RESPONSE_TIMEOUT:30s}
           routes:
+            - id: identity-service
+              uri: ${IDENTITY_SERVICE_URL:http://localhost:8081}
+              predicates:
+                - Path=/api/auth,/api/auth/**,/api/users,/api/users/**
             - id: catalog-service
               uri: ${CATALOG_SERVICE_URL:http://localhost:8082}
               predicates:
                 - Path=/api/products,/api/products/**,/api/categories,/api/categories/**,/api/admin/products,/api/admin/products/**,/api/admin/categories,/api/admin/categories/**
+            - id: inventory-service
+              uri: ${INVENTORY_SERVICE_URL:http://localhost:8083}
+              predicates:
+                - Path=/api/inventory,/api/inventory/**,/api/admin/inventory,/api/admin/inventory/**
+            - id: cart-service
+              uri: ${CART_SERVICE_URL:http://localhost:8084}
+              predicates:
+                - Path=/api/cart,/api/cart/**
+            - id: order-service
+              uri: ${ORDER_SERVICE_URL:http://localhost:8085}
+              predicates:
+                - Path=/api/checkout,/api/checkout/**,/api/orders,/api/orders/**,/api/admin/orders,/api/admin/orders/**
           globalcors:
             cors-configurations:
               "[/**]":
                 allowed-origins:
-                  - ${FRONTEND_ORIGIN:http://localhost:5173}
+                  - ${FRONTEND_ORIGIN:http://localhost:3000}
+                  - http://localhost:3000
+                  - http://localhost:5173
                 allowed-methods:
                   - GET
                   - POST
