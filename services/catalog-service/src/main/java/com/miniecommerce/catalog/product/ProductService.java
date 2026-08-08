@@ -82,8 +82,45 @@ public class ProductService {
 			request.price(),
 			status
 		);
+		product.setImageUrl(normalize(request.imageUrl()));
 
 		return ProductResponse.from(productRepository.save(product));
+	}
+
+	/**
+	 * Cập nhật product (admin only — controller enforce). Chỉ thay đổi các field
+	 * non-null trong request; SKU + categoryId giữ cố định.
+	 * <p>
+	 * Conflict (trùng slug/sku) sẽ bubble {@code DataIntegrityViolationException}
+	 * → handled ở {@code ApiExceptionHandler} trả 409.
+	 */
+	@Transactional
+	public ProductResponse update(UUID id, UpdateProductRequest request) {
+		Product product = productRepository.findById(id)
+			.orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy sản phẩm " + id));
+		product.applyUpdates(
+			request.name(),
+			request.slug(),
+			request.description(),
+			request.price(),
+			request.imageUrl(),
+			request.status()
+		);
+		return ProductResponse.from(productRepository.save(product));
+	}
+
+	/**
+	 * Xoá product (admin only). Không cascade với inventory/cart/order vì:
+	 * <ul>
+	 *   <li>Inventory là service riêng (DB khác schema) — admin có thể xoá inventory item trước.</li>
+	 *   <li>Order items lưu snapshot (sku/name/unitPrice) — không FK ngược.</li>
+	 * </ul>
+	 */
+	@Transactional
+	public void delete(UUID id) {
+		Product product = productRepository.findById(id)
+			.orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy sản phẩm " + id));
+		productRepository.delete(product);
 	}
 
 	private String normalize(String value) {
