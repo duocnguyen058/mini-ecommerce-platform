@@ -82,10 +82,11 @@ public class AuthService {
             new UsernamePasswordAuthenticationToken(request.username(), request.password())
         );
 
-        String token = jwtService.generateToken(authentication);
-
         User user = userRepository.findByUsername(request.username())
             .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy người dùng"));
+
+        // sub claim phải là userId UUID (cart/order/inventory parse UUID.fromString(sub))
+        String token = jwtService.generateToken(authentication, user.getId());
 
         Set<String> roles = user.getRoles().stream()
             .map(role -> "ROLE_" + role.getName().name())

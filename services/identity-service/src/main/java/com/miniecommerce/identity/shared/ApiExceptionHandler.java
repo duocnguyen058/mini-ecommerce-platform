@@ -1,8 +1,8 @@
 package com.miniecommerce.identity.shared;
 
-import java.net.URI;
 import java.time.Instant;
-import java.util.Map;
+import java.util.ArrayList;
+import java.util.List;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
@@ -64,10 +64,14 @@ public class ApiExceptionHandler {
         );
         problem.setTitle("Validation Failed");
         problem.setProperty("timestamp", Instant.now());
-        problem.setProperty("errors", e.getBindingResult().getFieldErrors()
-            .stream()
-            .map(FieldError::getDefaultMessage)
-            .toList());
+        List<String> errors = new ArrayList<>();
+        for (FieldError fieldError : e.getBindingResult().getFieldErrors()) {
+            String message = fieldError.getDefaultMessage();
+            if (message != null) {
+                errors.add(message);
+            }
+        }
+        problem.setProperty("errors", errors);
         return problem;
     }
 
