@@ -1,0 +1,68 @@
+spring:
+  application:
+    name: order-service
+  datasource:
+    url: ${ORDER_DB_URL:jdbc:postgresql://localhost:5433/order_db}
+    username: ${ORDER_DB_USERNAME:ecommerce}
+    password: ${ORDER_DB_PASSWORD:ecommerce_local}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        format_sql: true
+  flyway:
+    enabled: true
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USERNAME:ecommerce}
+    password: ${RABBITMQ_PASSWORD:ecommerce_local}
+  mvc:
+    problemdetails:
+      enabled: true
+
+server:
+  port: ${SERVER_PORT:8085}
+
+jwt:
+  public-key: ${JWT_PUBLIC_KEY:classpath:keys/public.pem}
+  issuer: ${JWT_ISSUER:mini-ecommerce}
+
+clients:
+  catalog:
+    base-url: ${CATALOG_SERVICE_URL:http://localhost:8082}
+  inventory:
+    base-url: ${INVENTORY_SERVICE_URL:http://localhost:8083}
+  cart:
+    base-url: ${CART_SERVICE_URL:http://localhost:8084}
+
+outbox:
+  poll-interval-ms: ${OUTBOX_POLL_INTERVAL_MS:1000}
+  batch-size: ${OUTBOX_BATCH_SIZE:50}
+
+resilience4j:
+  circuitbreaker:
+    instances:
+      inventoryClient:
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 10s
+        sliding-window-size: 20
+        minimum-number-of-calls: 10
+  retry:
+    instances:
+      inventoryClient:
+        max-attempts: 3
+        wait-duration: 500ms
+        retry-exceptions:
+          - org.springframework.web.client.ResourceAccessException
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always
