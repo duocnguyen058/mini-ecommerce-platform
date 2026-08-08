@@ -11,7 +11,6 @@ import java.util.UUID;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -77,91 +76,96 @@ public class CheckoutService {
         this.eventFactory = eventFactory;
     }
 
-  @Transactional
-  public OrderResponse checkout(UUID userId, CheckoutRequest request, String idempotencyKey) {
-    // (1) Idempotency replay
-    if (idempotencyKey != null && !idempotencyKey.isBlank()) {
-      Optional<IdempotencyRecord> cached = idempotencyRepository.findById(idempotencyKey);
-      if (cached.isPresent() && cached.get().getResponseId() != null) {
-        log.info("idempotency replay key={} → trả order {}", idempotencyKey, cached.get().getResponseId());
-        return orderRepository.findById(cached.get().getResponseId())
-          .map(OrderResponse::from)
-          .orElseThrow(() -> new ResourceNotFoundException(
-            "Order cached không tồn tại: " + cached.get().getResponseId()));
-      }
-    }
+    @Transactional
+    public OrderResponse checkout(UUID userId, CheckoutRequest request, String idempotencyKey) {
+        // (1) Idempotency replay
+        if (idempotencyKey != null && !idempotencyKey.isBlank()) {
+            Optional<IdempotencyRecord> cached = idempotencyRepository.findById(idempotencyKey);
+            if (cached.isPresent() && cached.get().getResponseId() != null) {
+                log.info("idempotency replay key={} → trả order {}", idempotencyKey, cached.get().getResponseId());
+                return orderRepository.findById(cached.get().getResponseId())
+                    .map(OrderResponse::from)
+                    .orElseThrow(() -> new ResourceNotFoundException(
+                        "Order cached không tồn tại: " + cached.get().getResponseId()));
+            }
+        }
 
-    // (2) Lấy cart
-    CartSnapshot cart = cartClient.fetchCart(userId);
-    if (cart.items() == null || cart.items().isEmpty()) {
-      throw new InvalidOrderRequestException("Giỏ hàng rỗng — không có gì để đặt");
-    }
+        // (2) Lấy cart
+        CartSnapshot cart = cartClient.fetchCart(userId);
+        if (cart.items() == null || cart.items().isEmpty()) {
+            throw new InvalidOrderRequestException("Giỏ hàng rỗng — không có gì để đặt");
+        }
 
-    // (3) Snapshot catalog + validate ACTIVE (gọi song song)
-    List<ProductSnapshot> products = new ArrayList<>();
-    for (CartItemSnapshot cartLine : cart.items()) {
-      products.add(catalogClient.fetchProduct(cartLine.productId()));
-    }
+        // (3) Snapshot catalog + validate ACTIVE
+        List<ProductSnapshot> products = new ArrayList<>();
+        for (CartItemSnapshot cartLine : cart.items()) {
+            products.add(catalogClient.fetchProduct(cartLine.productId()));
+        }
 
-    // Validate ACTIVE
-    for (ProductSnapshot product : products) {
-      if (!product.isActive()) {
-        throw new InvalidOrderRequestException(
-          "Sản phẩm không đang bán (status=" + product.status() + "): " + product.id());
-      }
-    }
+        // Validate ACTIVE
+        for (ProductSnapshot product : products) {
+            if (!product.isActive()) {
+                throw new InvalidOrderRequestException(
+                    "Sản phẩm không đang bán (status=" + product.status() + "): " + product.id());
+            }
+        }
 
-    // Kiểm tra tồn kho song song cho tất cả items
-    for (int i = 0; i < cart.items().size(); i++) {
-      CartItemSnapshot cartLine = cart.items().get(i);
-      ProductSnapshot product = products.get(i);
-      if (cartLine.quantity() <= 0) {
-        throw new InvalidOrderRequestException(
-          "Số lượng không hợp lệ cho sản phẩm " + product.id());
-      }
-      InventoryClient.StockCheckResponse stock = inventoryClient.checkStock(product.id());
-      if (stock != null && stock.availableQuantity() < cartLine.quantity()) {
-        throw new InvalidOrderRequestException(
-          "Hết hàng (còn " + stock.availableQuantity() + "/" + stock.quantityOnHand()
-          + ", đã giữ " + stock.quantityReserved()
-          + ") cho sản phẩm " + product.id() + " — cần " + cartLine.quantity());
-      }
-    }
+        // Kiểm tra tồn kho cho tất cả items
+        for (int i = 0; i < cart.items().size(); i++) {
+            CartItemSnapshot cartLine = cart.items().get(i);
+            ProductSnapshot product = products.get(i);
+            if (cartLine.quantity() <= 0) {
+                throw new InvalidOrderRequestException(
+                    "Số lượng không hợp lệ cho sản phẩm " + product.id());
+            }
+            InventoryClient.StockCheckResponse stock = inventoryClient.checkStock(product.id());
+            // Bắt buộc phải có bản ghi tồn kho & số lượng khả dụng đủ — nếu inventory
+            // chưa có item (stock == null) thì coi như không có hàng, chặn checkout.
+            int available = (stock == null) ? 0 : stock.availableQuantity();
+            if (available < cartLine.quantity()) {
+                int onHand = (stock == null) ? 0 : stock.quantityOnHand();
+                int reserved = (stock == null) ? 0 : stock.quantityReserved();
+                throw new InvalidOrderRequestException(
+                    "Hết hàng (còn " + available + "/" + onHand
+                    + ", đã giữ " + reserved
+                    + ") cho sản phẩm " + product.id() + " — cần " + cartLine.quantity());
+            }
+        }
 
-    // Build order
-    Order order = new Order(userId, request.shippingAddress(), request.currency());
-    BigDecimal total = BigDecimal.ZERO;
-    for (int i = 0; i < cart.items().size(); i++) {
-      CartItemSnapshot cartLine = cart.items().get(i);
-      ProductSnapshot product = products.get(i);
-      BigDecimal unitPrice = product.price();
-      OrderItem item = new OrderItem(
-        product.id(), product.sku(), product.name(), unitPrice, cartLine.quantity());
-      order.addItem(item);
-      total = total.add(item.getLineTotal());
-    }
-    assertTotalMatches(order, total);
+        // Build order
+        Order order = new Order(userId, request.shippingAddress(), request.currency());
+        BigDecimal total = BigDecimal.ZERO;
+        for (int i = 0; i < cart.items().size(); i++) {
+            CartItemSnapshot cartLine = cart.items().get(i);
+            ProductSnapshot product = products.get(i);
+            BigDecimal unitPrice = product.price();
+            OrderItem item = new OrderItem(
+                product.id(), product.sku(), product.name(), unitPrice, cartLine.quantity());
+            order.addItem(item);
+            total = total.add(item.getLineTotal());
+        }
+        assertTotalMatches(order, total);
 
-    // (4) Persist order + outbox order.created + idempotency record.
-    orderRepository.save(order);
-    outboxRepository.save(eventFactory.created(order));
-    if (idempotencyKey != null && !idempotencyKey.isBlank()) {
-      String requestHash = hashRequest(userId, request);
-      IdempotencyRecord record = new IdempotencyRecord(idempotencyKey, requestHash, order.getId());
-      idempotencyRepository.save(record);
-    }
+        // (4) Persist order + outbox order.created + idempotency record.
+        orderRepository.save(order);
+        outboxRepository.save(eventFactory.created(order));
+        if (idempotencyKey != null && !idempotencyKey.isBlank()) {
+            String requestHash = hashRequest(userId, request);
+            IdempotencyRecord record = new IdempotencyRecord(idempotencyKey, requestHash, order.getId());
+            idempotencyRepository.save(record);
+        }
 
-    // (5) Clear cart sau khi tạo đơn thành công — fire-and-forget.
-    try {
-      cartClient.clearCart(userId);
-    }
-    catch (Exception ex) {
-      log.warn("clear cart fail for user {} (order {} đã tạo): {}", userId, order.getId(), ex.getMessage());
-    }
+        // (5) Clear cart sau khi tạo đơn thành công — fire-and-forget.
+        try {
+            cartClient.clearCart(userId);
+        }
+        catch (Exception ex) {
+            log.warn("clear cart fail for user {} (order {} đã tạo): {}", userId, order.getId(), ex.getMessage());
+        }
 
-    log.info("checkout: order {} ở PENDING, chờ admin duyệt ({} items)", order.getId(), order.getItems().size());
-    return OrderResponse.from(order);
-  }
+        log.info("checkout: order {} ở PENDING, chờ admin duyệt ({} items)", order.getId(), order.getItems().size());
+        return OrderResponse.from(order);
+    }
 
     private void assertTotalMatches(Order order, BigDecimal expected) {
         if (order.getTotalAmount().compareTo(expected) != 0) {
