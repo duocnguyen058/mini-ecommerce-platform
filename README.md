@@ -215,6 +215,57 @@ Frontend mặc định trỏ API Gateway tại `http://localhost:8080` (có th�
 | **Backend (dev)**    | `./mvnw spring-boot:run` trong từng service | Cần hạ tầng đã chạy          |
 | **Frontend**         | `cd frontend && npm run dev`                | Mở `http://localhost:3000`   |
 
+---
+
+## 🐳 Build từng service bằng Docker (khi sửa backend)
+
+Mỗi service có `Dockerfile` riêng trong `services/<tên-service>/Dockerfile`. Build context luôn là **thư mục gốc repo** (vì cần root `pom.xml` aggregator), nên bạn phải chạy lệnh `docker build` từ gốc với `-f` (file) trỏ tới Dockerfile của service.
+
+### Build tất cả service
+
+```bash
+docker compose build
+```
+
+### Build 1 service cụ thể
+
+```bash
+# Cú pháp chung (chạy từ thư mục gốc repo)
+docker build -f services/<tên-service>/Dockerfile -t mini-ecommerce/<tên-service>:latest .
+```
+
+Ví dụ build từng service:
+
+| Service               | Lệnh build                                                                                           |
+| --------------------- | ---------------------------------------------------------------------------------------------------- |
+| **api-gateway**       | `docker build -f services/api-gateway/Dockerfile -t mini-ecommerce/api-gateway:latest .`             |
+| **identity-service**  | `docker build -f services/identity-service/Dockerfile -t mini-ecommerce/identity-service:latest .`   |
+| **catalog-service**   | `docker build -f services/catalog-service/Dockerfile -t mini-ecommerce/catalog-service:latest .`     |
+| **inventory-service** | `docker build -f services/inventory-service/Dockerfile -t mini-ecommerce/inventory-service:latest .` |
+| **cart-service**      | `docker build -f services/cart-service/Dockerfile -t mini-ecommerce/cart-service:latest .`           |
+| **order-service**     | `docker build -f services/order-service/Dockerfile -t mini-ecommerce/order-service:latest .`         |
+
+### Chạy lại 1 service sau khi sửa backend
+
+Sau khi sửa code backend của một service, chỉ cần **build + chạy lại service đó** (không cần dựng lại toàn bộ):
+
+```bash
+# Build lại đúng service đã sửa
+docker compose build <tên-service>
+
+# Chạy lại service đó (giữ nguyên các service khác + hạ tầng)
+docker compose up -d <tên-service>
+```
+
+Ví dụ sửa `order-service`:
+
+```bash
+docker compose build order-service
+docker compose up -d order-service
+```
+
+> 💡 **Mẹo:** Trong quá trình phát triển, nếu chỉ sửa source backend, bạn có thể chạy service bằng Maven trực tiếp (`../mvnw spring-boot:run`) cho nhanh mà không cần build image. Dùng Docker build khi cần đóng gói / chạy giống môi trường production.
+
 ### Các cổng truy cập
 
 | Thành phần                 | URL                                     |
