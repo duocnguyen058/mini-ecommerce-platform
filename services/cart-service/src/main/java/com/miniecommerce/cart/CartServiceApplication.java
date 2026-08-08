@@ -2,8 +2,13 @@ package com.miniecommerce.cart;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
+
+import com.miniecommerce.cart.shared.config.CartProperties;
+import com.miniecommerce.cart.shared.config.JwtConfig;
 
 @SpringBootApplication
+@EnableConfigurationProperties({ JwtConfig.class, CartProperties.class })
 public class CartServiceApplication {
 
 	public static void main(String[] args) {
