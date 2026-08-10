@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { ShoppingCart, Package, LogOut, LogIn, Menu, Store } from "lucide-react";
+import { ShoppingCart, Package, LogOut, LogIn, Menu, Store, Heart } from "lucide-react";
 
 import { useAuth } from "@/lib/auth-context";
 import { useCart } from "@/lib/cart-context";
+import { useWishlist } from "@/lib/use-wishlist";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -30,6 +31,7 @@ export function Navbar() {
   const router = useRouter();
   const { user, loading, logout } = useAuth();
   const { cart } = useCart();
+  const { wishlistCount } = useWishlist();
 
   const itemCount = cart?.itemCount ?? 0;
   const initial = user?.fullName?.[0]?.toUpperCase() ?? user?.username?.[0]?.toUpperCase() ?? "U";
@@ -65,6 +67,26 @@ export function Navbar() {
         </nav>
 
         <div className="ml-auto flex items-center gap-2">
+          {/* Wishlist icon */}
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label="Danh sách yêu thích"
+            className="relative"
+            onClick={() => router.push("/?wishlist=true")}
+            title={`Sản phẩm yêu thích (${wishlistCount})`}
+          >
+            <Heart className={`size-5 ${wishlistCount > 0 ? "fill-red-500 text-red-500" : ""}`} />
+            {wishlistCount > 0 && (
+              <Badge
+                variant="destructive"
+                className="absolute -top-1 -right-1 h-5 min-w-5 justify-center rounded-full px-1 text-[10px]"
+              >
+                {wishlistCount}
+              </Badge>
+            )}
+          </Button>
+
           {/* Cart icon */}
           <Button
             variant="ghost"
