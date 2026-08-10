@@ -3,49 +3,28 @@
 import { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Breadcrumb } from "@/components/breadcrumb";
+import { AddressManager } from "@/components/address-manager";
 import { useAuth } from "@/lib/auth-context";
 import { useCart } from "@/lib/cart-context";
 import { useCartProducts } from "@/lib/use-cart-products";
+import { useAddresses, type StoredAddress } from "@/lib/use-addresses";
 import { orderApi, cartApi, formatVND } from "@/lib/api";
 import { toast } from "@/lib/toast";
-import type { Address, OrderResponse } from "@/lib/types";
+import type { OrderResponse } from "@/lib/types";
 import { ORDER_STATUS_LABEL } from "@/lib/order-status-labels";
-
-const EMPTY_ADDRESS: Address = {
-  recipient: "",
-  phone: "",
-  streetLine: "",
-  city: "",
-  district: "",
-  ward: "",
-  country: "VN",
-};
-
-const REQUIRED_FIELDS: Array<{ key: keyof Address; label: string }> = [
-  { key: "recipient", label: "Người nhận" },
-  { key: "phone", label: "Số điện thoại" },
-  { key: "streetLine", label: "Số nhà, tên đường" },
-  { key: "ward", label: "Phường/Xã" },
-  { key: "district", label: "Quận/Huyện" },
-  { key: "city", label: "Tỉnh/Thành phố" },
-];
+import { ShoppingBag, ArrowRight, ShieldCheck } from "lucide-react";
 
 export default function CheckoutPage() {
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
   const { cart, loading: cartLoading, refresh, clearCartState } = useCart();
   const { products, loading: productsLoading } = useCartProducts(cart);
+  const { defaultAddress } = useAddresses();
 
-  const [address, setAddress] = useState<Address>(EMPTY_ADDRESS);
+  const [selectedAddress, setSelectedAddress] = useState<StoredAddress | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   const idempotencyKey = useMemo(() => crypto.randomUUID(), []);
@@ -56,6 +35,13 @@ export default function CheckoutPage() {
     }
   }, [authLoading, user, router]);
 
+  useEffect(() => {
+    if (defaultAddress && !selectedAddress) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setSelectedAddress(defaultAddress);
+    }
+  }, [defaultAddress, selectedAddress]);
+
   if (!authLoading && !user) return null;
 
   const items = cart?.items ?? [];
@@ -64,49 +50,47 @@ export default function CheckoutPage() {
     return sum + (p ? p.price * it.quantity : 0);
   }, 0);
 
-  function update<K extends keyof Address>(key: K, val: string) {
-    setAddress((prev) => ({ ...prev, [key]: val }));
-  }
-
-  function validateAddress(): string | null {
-    for (const f of REQUIRED_FIELDS) {
-      const v = (address[f.key] ?? "").trim();
-      if (!v) {
-        return `${f.label} không được để trống`;
-      }
-    }
-    if (!/^[0-9+\-\s()]+$/.test((address.phone ?? "").trim())) {
-      return "Số điện thoại không hợp lệ";
-    }
-    return null;
-  }
+  const activeShippingAddr = selectedAddress ?? defaultAddress;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (items.length === 0) {
-      toast.warning({ title: "Giỏ trống", description: "Không có sản phẩm để thanh toán." });
+      toast.warning({
+        title: "Giỏ hàng trống",
+        description: "Không có sản phẩm để thanh toán.",
+      });
       return;
     }
-    const validationError = validateAddress();
-    if (validationError) {
-      toast.error({ title: "Địa chỉ không hợp lệ", description: validationError });
+
+    if (!activeShippingAddr) {
+      toast.error({
+        title: "Thiếu địa chỉ giao hàng",
+        description: "Vui lòng chọn hoặc thêm địa chỉ giao hàng trước khi đặt hàng.",
+      });
       return;
     }
+
     setSubmitting(true);
     try {
-      const body = { shippingAddress: address, currency: "VND" };
-      const order = (await orderApi.checkout(body, idempotencyKey)) as OrderResponse;
+      const body = { shippingAddress: activeShippingAddr, currency: "VND" };
+      const order = (await orderApi.checkout(
+        body,
+        idempotencyKey
+      )) as OrderResponse;
 
       try {
         await cartApi.clear();
       } catch {
-        // BE already cleared
+        // BE already cleared cart
       }
       clearCartState();
 
       toast.success({
-        title: "Đặt hàng thành công",
-        description: `Đơn #${order.id.slice(0, 8)} — trạng thái: ${ORDER_STATUS_LABEL[order.status] ?? order.status}`,
+        title: "Đặt hàng thành công!",
+        description: `Mã đơn hàng #${order.id.slice(
+          0,
+          8
+        )} — Trạng thái: ${ORDER_STATUS_LABEL[order.status] ?? order.status}`,
       });
       router.push(`/orders/${order.id}`);
     } catch (err) {
@@ -122,11 +106,11 @@ export default function CheckoutPage() {
 
   if (loading && cart !== null) {
     return (
-      <div className="mx-auto w-full max-w-3xl px-4 py-12 sm:px-6">
-        <Skeleton className="mb-6 h-8 w-48" />
+      <div className="mx-auto w-full max-w-4xl px-4 py-8 sm:px-6 space-y-6">
+        <Skeleton className="h-8 w-48" />
         <div className="grid gap-6 md:grid-cols-2">
-          <Skeleton className="h-96 w-full" />
-          <Skeleton className="h-48 w-full" />
+          <Skeleton className="h-96 w-full rounded-xl" />
+          <Skeleton className="h-96 w-full rounded-xl" />
         </div>
       </div>
     );
@@ -134,96 +118,121 @@ export default function CheckoutPage() {
 
   if (items.length === 0) {
     return (
-      <div className="mx-auto w-full max-w-3xl px-4 py-12 sm:px-6">
-        <h1 className="mb-8 text-2xl font-bold tracking-tight">Thanh toán</h1>
-        <div className="rounded-lg border border-dashed py-16 text-center">
-          <p className="text-sm text-muted-foreground">Giỏ hàng của bạn đang trống.</p>
-          <Button className="mt-4" variant="outline" onClick={() => router.push("/")}>
-            Tiếp tục mua sắm
+      <div className="mx-auto w-full max-w-3xl px-4 py-12 sm:px-6 space-y-6">
+        <Breadcrumb items={[{ label: "Thanh toán" }]} />
+        <Card className="p-12 text-center border-dashed rounded-2xl">
+          <ShoppingBag className="mx-auto size-12 text-muted-foreground/40 mb-3" />
+          <h2 className="text-xl font-bold">Giỏ hàng của bạn đang trống</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Vui lòng chọn sản phẩm vào giỏ hàng trước khi tiến hành thanh toán.
+          </p>
+          <Button
+            className="mt-6 font-bold"
+            onClick={() => router.push("/")}
+          >
+            Quay lại mua sắm
           </Button>
-        </div>
+        </Card>
       </div>
     );
   }
 
   return (
-    <div className="mx-auto w-full max-w-3xl px-4 py-12 sm:px-6">
-      <h1 className="mb-8 text-2xl font-bold tracking-tight sm:text-3xl">Thanh toán</h1>
+    <div className="mx-auto w-full max-w-5xl px-4 py-8 sm:px-6 space-y-6">
+      {/* Breadcrumb Navigation */}
+      <Breadcrumb
+        items={[
+          { label: "Giỏ hàng", href: "/cart" },
+          { label: "Thanh toán" },
+        ]}
+      />
 
-      <form onSubmit={handleSubmit} className="grid gap-6 md:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Địa chỉ giao hàng</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="space-y-1.5">
-              <Label htmlFor="recipient">Người nhận <span className="text-destructive">*</span></Label>
-              <Input id="recipient" value={address.recipient} onChange={(e) => update("recipient", e.target.value)} disabled={submitting} required maxLength={100} />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="phone">Số điện thoại <span className="text-destructive">*</span></Label>
-              <Input id="phone" type="tel" value={address.phone} onChange={(e) => update("phone", e.target.value)} disabled={submitting} required maxLength={20} placeholder="vd: 0901234567" />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="streetLine">Số nhà, tên đường <span className="text-destructive">*</span></Label>
-              <Input id="streetLine" value={address.streetLine} onChange={(e) => update("streetLine", e.target.value)} disabled={submitting} required maxLength={200} />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label htmlFor="ward">Phường/Xã <span className="text-destructive">*</span></Label>
-                <Input id="ward" value={address.ward} onChange={(e) => update("ward", e.target.value)} disabled={submitting} required maxLength={80} />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="district">Quận/Huyện <span className="text-destructive">*</span></Label>
-                <Input id="district" value={address.district} onChange={(e) => update("district", e.target.value)} disabled={submitting} required maxLength={80} />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label htmlFor="city">Tỉnh/Thành phố <span className="text-destructive">*</span></Label>
-                <Input id="city" value={address.city} onChange={(e) => update("city", e.target.value)} disabled={submitting} required maxLength={80} />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="country">Quốc gia</Label>
-                <Input id="country" value={address.country || "VN"} onChange={(e) => update("country", e.target.value)} disabled={submitting} />
-              </div>
-            </div>
-            <p className="text-xs text-muted-foreground">Vui lòng nhập đầy đủ các trường có dấu <span className="text-destructive">*</span>.</p>
-          </CardContent>
-        </Card>
+      <h1 className="text-2xl font-extrabold tracking-tight sm:text-3xl text-foreground">
+        Thanh toán đơn hàng
+      </h1>
 
-        <Card className="flex flex-col">
-          <CardHeader>
-            <CardTitle className="text-base">Đơn hàng của bạn</CardTitle>
-          </CardHeader>
-          <CardContent className="flex-1 space-y-3">
-            {items.map((item) => {
-              const p = products[item.productId];
-              return (
-                <div key={item.productId} className="flex justify-between gap-2 text-sm">
-                  <span className="min-w-0 flex-1 truncate">
-                    {p?.name ?? "Đang tải..."} <span className="text-muted-foreground">&times;{item.quantity}</span>
-                  </span>
-                  <span className="tabular-nums">
-                    {p ? formatVND(p.price * item.quantity) : "—"}
+      <form onSubmit={handleSubmit} className="grid gap-6 lg:grid-cols-12 items-start">
+        {/* Left Column: Address Manager */}
+        <div className="lg:col-span-7 space-y-6">
+          <AddressManager
+            selectedAddressId={activeShippingAddr?.id}
+            onSelectAddress={(addr) => setSelectedAddress(addr)}
+          />
+
+          <Card className="rounded-xl border shadow-xs bg-muted/20">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-bold flex items-center gap-1.5">
+                <ShieldCheck className="size-4 text-green-600" />
+                Phương thức thanh toán
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="text-xs text-muted-foreground leading-relaxed">
+              Thanh toán khi nhận hàng (COD). Quý khách kiểm tra hàng trước khi thanh toán cho nhân viên giao hàng.
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Right Column: Order Summary */}
+        <div className="lg:col-span-5">
+          <Card className="rounded-xl border shadow-xs sticky top-20">
+            <CardHeader className="border-b pb-3">
+              <CardTitle className="text-base font-bold">Sản phẩm thanh toán ({items.length})</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4 pt-4">
+              <div className="max-h-60 overflow-y-auto space-y-3 pr-1 divide-y divide-border/40">
+                {items.map((item) => {
+                  const p = products[item.productId];
+                  return (
+                    <div key={item.productId} className="flex justify-between gap-3 text-sm pt-3 first:pt-0">
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium text-foreground truncate">
+                          {p?.name ?? "Đang tải..."}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          Số lượng: {item.quantity}
+                        </p>
+                      </div>
+                      <span className="font-bold tabular-nums shrink-0">
+                        {p ? formatVND(p.price * item.quantity) : "—"}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="border-t pt-3 space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Tạm tính</span>
+                  <span className="font-semibold tabular-nums">{formatVND(totalAmount)}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Phí vận chuyển</span>
+                  <span className="font-semibold text-green-600">Miễn phí</span>
+                </div>
+                <div className="border-t pt-3 flex justify-between items-baseline">
+                  <span className="font-bold text-base">Tổng cộng</span>
+                  <span className="text-xl font-extrabold text-primary tabular-nums">
+                    {formatVND(totalAmount)}
                   </span>
                 </div>
-              );
-            })}
-            <div className="flex justify-between border-t pt-3 text-sm font-semibold">
-              <span>Tạm tính</span>
-              <span className="tabular-nums text-primary">{formatVND(totalAmount)}</span>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Tổng tiền sẽ do backend tính lại dựa trên giá sản phẩm tại thời điểm checkout.
-            </p>
-          </CardContent>
-          <div className="border-t p-4">
-            <Button type="submit" className="w-full" disabled={submitting}>
-              {submitting ? "Đang xử lý..." : "Đặt hàng"}
-            </Button>
-          </div>
-        </Card>
+              </div>
+
+              <Button
+                type="submit"
+                size="lg"
+                className="w-full font-bold h-12 shadow-md gap-2"
+                disabled={submitting}
+              >
+                {submitting ? "Đang xử lý đơn..." : "Xác nhận đặt hàng"}
+                <ArrowRight className="size-4" />
+              </Button>
+
+              <p className="text-[11px] text-center text-muted-foreground">
+                Nhấn &quot;Xác nhận đặt hàng&quot; đồng nghĩa với việc bạn đồng ý tuân thủ các điều khoản dịch vụ của Mini E-Commerce.
+              </p>
+            </CardContent>
+          </Card>
+        </div>
       </form>
     </div>
   );
