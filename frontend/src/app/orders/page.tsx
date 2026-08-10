@@ -16,6 +16,8 @@ import {
   ORDER_STATUS_FILTERS,
 } from "@/lib/order-status-labels";
 
+import { Breadcrumb } from "@/components/breadcrumb";
+
 const STATUS_FILTERS: ("ALL" | OrderStatus)[] = ["ALL", ...ORDER_STATUS_FILTERS];
 
 export default function OrdersPage() {
@@ -68,8 +70,9 @@ export default function OrdersPage() {
   if (!authLoading && !user) return null;
 
   return (
-    <div className="mx-auto w-full max-w-4xl px-4 py-12 sm:px-6">
-      <h1 className="mb-6 text-2xl font-bold tracking-tight sm:text-3xl">Đơn hàng của tôi</h1>
+    <div className="mx-auto w-full max-w-4xl px-4 py-8 sm:px-6 space-y-6">
+      <Breadcrumb items={[{ label: "Đơn hàng của tôi" }]} />
+      <h1 className="text-2xl font-extrabold tracking-tight sm:text-3xl">Đơn hàng của tôi</h1>
 
       <div className="mb-6 flex flex-wrap gap-2">
         {STATUS_FILTERS.map((s) => (
