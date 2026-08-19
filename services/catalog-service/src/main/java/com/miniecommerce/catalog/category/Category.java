@@ -12,50 +12,137 @@ import jakarta.persistence.Table;
 @Table(name = "categories")
 public class Category {
 
-	@Id
-	private UUID id;
+    @Id
+    private UUID id;
 
-	@Column(nullable = false, length = 120)
-	private String name;
+    @Column(name = "parent_id")
+    private UUID parentId;
 
-	@Column(nullable = false, unique = true, length = 140)
-	private String slug;
+    @Column(nullable = false, length = 120)
+    private String name;
 
-	@Column(name = "created_at", nullable = false, updatable = false)
-	private Instant createdAt;
+    @Column(nullable = false, unique = true, length = 140)
+    private String slug;
 
-	@Column(name = "updated_at", nullable = false)
-	private Instant updatedAt;
+    @Column(length = 100)
+    private String icon;
 
-	protected Category() {
-	}
+    @Column(name = "banner_url", length = 500)
+    private String bannerUrl;
 
-	public Category(String name, String slug) {
-		this.id = UUID.randomUUID();
-		this.name = name;
-		this.slug = slug;
-		this.createdAt = Instant.now();
-		this.updatedAt = this.createdAt;
-	}
+    @Column(name = "image_url", length = 500)
+    private String imageUrl;
 
-	public UUID getId() {
-		return id;
-	}
+    @Column(name = "meta_title", length = 200)
+    private String metaTitle;
 
-	public String getName() {
-		return name;
-	}
+    @Column(name = "meta_description", length = 500)
+    private String metaDescription;
 
-	public String getSlug() {
-		return slug;
-	}
+    @Column(name = "meta_keywords", length = 300)
+    private String metaKeywords;
 
-	public Instant getCreatedAt() {
-		return createdAt;
-	}
+    @Column(name = "canonical_url", length = 500)
+    private String canonicalUrl;
 
-	public Instant getUpdatedAt() {
-		return updatedAt;
-	}
+    @Column(name = "og_image", length = 500)
+    private String ogImage;
+
+    @Column(name = "structured_data", columnDefinition = "TEXT")
+    private String structuredData;
+
+    @Column(name = "created_at", nullable = false, updatable = false)
+    private Instant createdAt;
+
+    @Column(name = "updated_at", nullable = false)
+    private Instant updatedAt;
+
+    protected Category() {
+    }
+
+    public Category(String name, String slug) {
+        this.id = UUID.randomUUID();
+        this.name = name;
+        this.slug = slug;
+        this.createdAt = Instant.now();
+        this.updatedAt = this.createdAt;
+    }
+
+    public Category(UUID parentId, String name, String slug, String icon) {
+        this.id = UUID.randomUUID();
+        this.parentId = parentId;
+        this.name = name;
+        this.slug = slug;
+        this.icon = icon;
+        this.createdAt = Instant.now();
+        this.updatedAt = this.createdAt;
+    }
+
+    public UUID getId() {
+        return id;
+    }
+
+    public UUID getParentId() {
+        return parentId;
+    }
+
+    public void setParentId(UUID parentId) {
+        this.parentId = parentId;
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public String getSlug() {
+        return slug;
+    }
+
+    public String getIcon() {
+        return icon;
+    }
+
+    public void setIcon(String icon) {
+        this.icon = icon;
+    }
+
+    public String getBannerUrl() {
+        return bannerUrl;
+    }
+
+    public String getImageUrl() {
+        return imageUrl;
+    }
+
+    public String getMetaTitle() {
+        return metaTitle;
+    }
+
+    public String getMetaDescription() {
+        return metaDescription;
+    }
+
+    public String getMetaKeywords() {
+        return metaKeywords;
+    }
+
+    public String getCanonicalUrl() {
+        return canonicalUrl;
+    }
+
+    public String getOgImage() {
+        return ogImage;
+    }
+
+    public String getStructuredData() {
+        return structuredData;
+    }
+
+    public Instant getCreatedAt() {
+        return createdAt;
+    }
+
+    public Instant getUpdatedAt() {
+        return updatedAt;
+    }
 }
-
