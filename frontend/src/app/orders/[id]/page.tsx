@@ -190,8 +190,8 @@ export default function OrderDetailPage() {
               <span>{order.currency}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Reservation ID</span>
-              <span className="font-mono text-xs">{order.reservationId ?? "—"}</span>
+              <span className="text-muted-foreground">Reservation IDs</span>
+              <span className="font-mono text-xs">{formatReservations(order.reservationIds)}</span>
             </div>
             <div className="flex justify-between font-semibold">
               <span>Tổng tiền</span>
@@ -256,6 +256,11 @@ function StatusBadge({ status }: { status: OrderStatus }) {
       {ORDER_STATUS_LABEL[status] ?? status}
     </span>
   );
+}
+
+function formatReservations(ids?: string[]): string {
+  if (!ids || ids.length === 0) return "—";
+  return ids.length === 1 ? ids[0] : `${ids.length} reservations`;
 }
 
 function formatDateTime(iso?: string): string {
