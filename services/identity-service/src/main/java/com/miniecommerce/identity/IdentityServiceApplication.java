@@ -6,7 +6,10 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 
 import com.miniecommerce.identity.config.JwtConfig;
 
+import org.springframework.scheduling.annotation.EnableAsync;
+
 @SpringBootApplication
+@EnableAsync
 @EnableConfigurationProperties(JwtConfig.class)
 public class IdentityServiceApplication {
 
