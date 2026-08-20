@@ -53,7 +53,9 @@ public class SecurityConfig {
 				// Public read cho catalog — khách vãng lai browse được.
 				.requestMatchers(org.springframework.http.HttpMethod.GET,
 					"/api/products", "/api/products/**",
-					"/api/categories", "/api/categories/**").permitAll()
+					"/api/categories", "/api/categories/**",
+					"/api/v1/brands", "/api/v1/brands/**",
+					"/api/v1/products", "/api/v1/products/**").permitAll()
 				.anyRequest().authenticated()
 			)
 			.oauth2ResourceServer(oauth2 -> oauth2
