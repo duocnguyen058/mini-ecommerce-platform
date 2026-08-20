@@ -42,7 +42,10 @@ public class User {
     private String phone;
 
     @Column(nullable = false)
-    private boolean enabled = true;
+    private boolean enabled = false;
+
+    @Column(name = "email_verified", nullable = false)
+    private boolean emailVerified = false;
 
     @ManyToMany(fetch = FetchType.EAGER)
     @JoinTable(
@@ -96,6 +99,8 @@ public class User {
     public void setPhone(String phone) { this.phone = phone; }
     public boolean isEnabled() { return enabled; }
     public void setEnabled(boolean enabled) { this.enabled = enabled; }
+    public boolean isEmailVerified() { return emailVerified; }
+    public void setEmailVerified(boolean emailVerified) { this.emailVerified = emailVerified; }
     public Set<Role> getRoles() { return roles; }
     public void setRoles(Set<Role> roles) { this.roles = roles; }
     public Instant getCreatedAt() { return createdAt; }
