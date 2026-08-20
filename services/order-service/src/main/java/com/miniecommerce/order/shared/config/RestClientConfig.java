@@ -3,6 +3,7 @@ package com.miniecommerce.order.shared.config;
 import java.net.http.HttpClient;
 import java.time.Duration;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
@@ -35,8 +36,23 @@ public class RestClientConfig {
   }
 
   @Bean
-  RestClient inventoryRestClient(OrderProperties properties) {
-    return buildClient(properties.inventory());
+  RestClient inventoryRestClient(OrderProperties properties,
+      @Value("${app.inventory.internal-token:}") String internalToken) {
+    // Inventory KHÔNG nhận JWT người dùng — các endpoint internal (reserve/confirm/
+    // cancel/adjust) là service-to-service. order-service gọi bằng shared secret
+    // (X-Internal-Token) để inventory gán role SERVICE. Nhờ vậy CUSTOMER không thể
+    // gọi trực tiếp, nhưng các side-effect do khách khởi tạo (huỷ đơn/trả hàng)
+    // vẫn chạy được.
+    return RestClient.builder()
+      .baseUrl(properties.inventory().baseUrl())
+      .requestInterceptor((request, body, execution) -> {
+        if (internalToken != null && !internalToken.isBlank()) {
+          request.getHeaders().set("X-Internal-Token", internalToken);
+        }
+        return execution.execute(request, body);
+      })
+      .requestFactory(REQUEST_FACTORY)
+      .build();
   }
 
   @Bean
