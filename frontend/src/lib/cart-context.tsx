@@ -59,14 +59,16 @@ export function CartProvider({ children }: { children: ReactNode }) {
     }
   }, [user, pathname]);
 
-  // Khi user thay đổi (login/logout) → tải lại cart. refresh() là async và
-  // setState diễn ra trong callback sau `await` (không sync trong effect body),
-  // nhưng ESLint vẫn flag nên tạm disable dòng này.
+  // Khi user thay đổi (login/logout) → tải lại cart hoặc reset.
   useEffect(() => {
+    if (!user) {
+      setCart(null);
+      return;
+    }
     if (skipFetch) return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     void refresh();
-  }, [refresh, skipFetch]);
+  }, [user, refresh, skipFetch]);
+
 
   function clearCartState() {
     setCart(null);
