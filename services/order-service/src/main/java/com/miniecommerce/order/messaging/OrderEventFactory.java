@@ -1,5 +1,6 @@
 package com.miniecommerce.order.messaging;
 
+import java.util.List;
 import java.util.UUID;
 
 import org.springframework.stereotype.Component;
@@ -39,16 +40,28 @@ public class OrderEventFactory {
 		return build(order, "order.cancelled");
 	}
 
+	/** Tạo {@link OutboxEvent} cho event {@code order.returned}. */
+	public OutboxEvent returned(Order order) {
+		return build(order, "order.returned");
+	}
+
 	private OutboxEvent build(Order order, String eventType) {
+		String customerName = (order.getShippingAddress() != null && order.getShippingAddress().recipient() != null)
+				? order.getShippingAddress().recipient()
+				: "Khách hàng";
+		int totalQty = order.getItems().stream().mapToInt(OrderItem::getQuantity).sum();
+
 		OrderEvent event = new OrderEvent(
 			UUID.randomUUID(),
 			eventType,
 			order.getId(),
 			order.getUserId(),
+			customerName,
+			totalQty,
 			order.getStatus().name(),
 			order.getTotalAmount(),
 			order.getCurrency(),
-			order.getReservationId(),
+			List.copyOf(order.getReservationIds()),
 			order.getItems().stream()
 				.map(OrderEventFactory::lineFrom)
 				.toList(),
