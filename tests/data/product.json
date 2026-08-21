@@ -1,0 +1,414 @@
+{
+  "module": "product",
+  "metadata": {
+    "generatedAt": "2026-08-15T02:14:34.159Z",
+    "standard": "Senior QA & Security Test Automation Suite",
+    "categories": [
+      "Positive",
+      "Negative",
+      "Boundary Value Analysis (BVA)",
+      "Equivalence Partitioning (EP)",
+      "Null",
+      "Empty",
+      "Duplicate",
+      "Special Character",
+      "Unicode",
+      "Invalid Format",
+      "SQL Injection",
+      "XSS",
+      "Expired Token",
+      "Wrong Permission",
+      "Large Payload",
+      "Concurrent",
+      "Random Data"
+    ]
+  },
+  "positive": [
+    {
+      "scenarioId": "PRODUCT_POS_001",
+      "description": "Valid standard product creation/operation",
+      "data": {
+        "productId": "VALID_PRODUCT_01",
+        "status": "ACTIVE",
+        "name": "Standard Valid product",
+        "amount": 1500000,
+        "quantity": 2,
+        "email": "test.product@miniecommerce.com",
+        "createdAt": "2026-08-15T02:14:34.159Z"
+      },
+      "expectedResult": {
+        "statusCode": 200,
+        "success": true
+      }
+    },
+    {
+      "scenarioId": "PRODUCT_POS_002",
+      "description": "Valid secondary flow for product",
+      "data": {
+        "productId": "VALID_PRODUCT_02",
+        "status": "CONFIRMED",
+        "name": "Secondary Valid product",
+        "amount": 50000000,
+        "quantity": 10,
+        "email": "vip.product@miniecommerce.com"
+      },
+      "expectedResult": {
+        "statusCode": 200,
+        "success": true
+      }
+    }
+  ],
+  "negative": [
+    {
+      "scenarioId": "PRODUCT_NEG_001",
+      "description": "Invalid payload missing mandatory identifier for product",
+      "data": {
+        "productId": ""
+      },
+      "expectedResult": {
+        "statusCode": 400,
+        "errorCode": "VALIDATION_FAILED"
+      }
+    },
+    {
+      "scenarioId": "PRODUCT_NEG_002",
+      "description": "Invalid data type mismatch for product",
+      "data": {
+        "amount": "INVALID_NUMBER_STRING",
+        "quantity": -10
+      },
+      "expectedResult": {
+        "statusCode": 400,
+        "errorCode": "TYPE_MISMATCH"
+      }
+    }
+  ],
+  "boundaryValueAnalysis": [
+    {
+      "scenarioId": "PRODUCT_BVA_MIN_001",
+      "description": "Minimum valid boundary value (e.g. quantity=1, amount=1000)",
+      "data": {
+        "quantity": 1,
+        "amount": 1000,
+        "length": 1
+      },
+      "expectedResult": {
+        "statusCode": 200,
+        "success": true
+      }
+    },
+    {
+      "scenarioId": "PRODUCT_BVA_MAX_001",
+      "description": "Maximum allowable boundary limit (e.g. max quantity=999, amount=999999999)",
+      "data": {
+        "quantity": 999,
+        "amount": 999999999,
+        "length": 255
+      },
+      "expectedResult": {
+        "statusCode": 200,
+        "success": true
+      }
+    },
+    {
+      "scenarioId": "PRODUCT_BVA_EXCEED_001",
+      "description": "Out-of-boundary overflow value",
+      "data": {
+        "quantity": 1000,
+        "amount": 1000000000000
+      },
+      "expectedResult": {
+        "statusCode": 422,
+        "errorCode": "OUT_OF_BOUNDS"
+      }
+    }
+  ],
+  "equivalencePartitioning": [
+    {
+      "scenarioId": "PRODUCT_EP_VALID_CLASS",
+      "partition": "Valid class (standard range)",
+      "data": {
+        "amount": 2500000,
+        "discountPct": 15,
+        "quantity": 3
+      },
+      "expectedResult": {
+        "statusCode": 200,
+        "success": true
+      }
+    },
+    {
+      "scenarioId": "PRODUCT_EP_INVALID_NEGATIVE_CLASS",
+      "partition": "Invalid class (negative value)",
+      "data": {
+        "amount": -50000,
+        "discountPct": -5,
+        "quantity": -1
+      },
+      "expectedResult": {
+        "statusCode": 400,
+        "errorCode": "NEGATIVE_NOT_ALLOWED"
+      }
+    }
+  ],
+  "nullValues": [
+    {
+      "scenarioId": "PRODUCT_NULL_001",
+      "description": "Null primary identifier",
+      "data": {
+        "productId": null,
+        "name": null
+      },
+      "expectedResult": {
+        "statusCode": 400,
+        "errorCode": "FIELD_REQUIRED"
+      }
+    }
+  ],
+  "emptyValues": [
+    {
+      "scenarioId": "PRODUCT_EMPTY_001",
+      "description": "Empty strings and arrays",
+      "data": {
+        "productId": "",
+        "items": [],
+        "tags": []
+      },
+      "expectedResult": {
+        "statusCode": 400,
+        "errorCode": "EMPTY_NOT_ALLOWED"
+      }
+    }
+  ],
+  "duplicates": [
+    {
+      "scenarioId": "PRODUCT_DUP_001",
+      "description": "Duplicate unique key insertion",
+      "data": {
+        "productId": "DUPLICATE_KEY_PRODUCT"
+      },
+      "expectedResult": {
+        "statusCode": 409,
+        "errorCode": "DUPLICATE_ENTITY"
+      }
+    }
+  ],
+  "specialCharacters": [
+    {
+      "scenarioId": "PRODUCT_SPEC_001",
+      "description": "Special symbol character handling",
+      "data": {
+        "name": "!@#$%^&*()_+{}|:\"<>?~`-=[]\\;',./"
+      },
+      "expectedResult": {
+        "statusCode": 200,
+        "sanitized": true
+      }
+    }
+  ],
+  "unicode": [
+    {
+      "scenarioId": "PRODUCT_UNICODE_001",
+      "description": "Vietnamese UTF-8 & Emoji character support",
+      "data": {
+        "name": "Nguyễn Văn Đạt",
+        "note": "Tiếng Việt có dấu: ă, â, đ, ê, ô, ơ, ư",
+        "tag": "🌟🔥🚀🎉 Đơn hàng VIP"
+      },
+      "expectedResult": {
+        "statusCode": 200,
+        "success": true
+      }
+    }
+  ],
+  "invalidFormat": [
+    {
+      "scenarioId": "PRODUCT_FMT_001",
+      "description": "Malformed email / UUID / date format",
+      "data": {
+        "email": "not-an-email",
+        "uuid": "1234-invalid-uuid",
+        "date": "32/13/2026"
+      },
+      "expectedResult": {
+        "statusCode": 400,
+        "errorCode": "INVALID_FORMAT"
+      }
+    }
+  ],
+  "sqlInjection": [
+    {
+      "scenarioId": "PRODUCT_SQLI_001",
+      "description": "SQL Injection vector test #1",
+      "payload": "' OR '1'='1",
+      "data": {
+        "productId": "' OR '1'='1",
+        "search": "' OR '1'='1",
+        "query": "' OR '1'='1"
+      },
+      "expectedResult": {
+        "statusCode": 400,
+        "neutralized": true
+      }
+    },
+    {
+      "scenarioId": "PRODUCT_SQLI_002",
+      "description": "SQL Injection vector test #2",
+      "payload": "admin' --",
+      "data": {
+        "productId": "admin' --",
+        "search": "admin' --",
+        "query": "admin' --"
+      },
+      "expectedResult": {
+        "statusCode": 400,
+        "neutralized": true
+      }
+    },
+    {
+      "scenarioId": "PRODUCT_SQLI_003",
+      "description": "SQL Injection vector test #3",
+      "payload": "1; DROP TABLE users;--",
+      "data": {
+        "productId": "1; DROP TABLE users;--",
+        "search": "1; DROP TABLE users;--",
+        "query": "1; DROP TABLE users;--"
+      },
+      "expectedResult": {
+        "statusCode": 400,
+        "neutralized": true
+      }
+    },
+    {
+      "scenarioId": "PRODUCT_SQLI_004",
+      "description": "SQL Injection vector test #4",
+      "payload": "' UNION SELECT null, username, password FROM users--",
+      "data": {
+        "productId": "' UNION SELECT null, username, password FROM users--",
+        "search": "' UNION SELECT null, username, password FROM users--",
+        "query": "' UNION SELECT null, username, password FROM users--"
+      },
+      "expectedResult": {
+        "statusCode": 400,
+        "neutralized": true
+      }
+    }
+  ],
+  "xss": [
+    {
+      "scenarioId": "PRODUCT_XSS_001",
+      "description": "Cross-Site Scripting vector test #1",
+      "payload": "<script>alert('XSS')</script>",
+      "data": {
+        "name": "<script>alert('XSS')</script>",
+        "comment": "<script>alert('XSS')</script>",
+        "review": "<script>alert('XSS')</script>"
+      },
+      "expectedResult": {
+        "statusCode": 200,
+        "sanitized": true
+      }
+    },
+    {
+      "scenarioId": "PRODUCT_XSS_002",
+      "description": "Cross-Site Scripting vector test #2",
+      "payload": "<img src=x onerror=alert(1)>",
+      "data": {
+        "name": "<img src=x onerror=alert(1)>",
+        "comment": "<img src=x onerror=alert(1)>",
+        "review": "<img src=x onerror=alert(1)>"
+      },
+      "expectedResult": {
+        "statusCode": 200,
+        "sanitized": true
+      }
+    },
+    {
+      "scenarioId": "PRODUCT_XSS_003",
+      "description": "Cross-Site Scripting vector test #3",
+      "payload": "javascript:alert(document.cookie)",
+      "data": {
+        "name": "javascript:alert(document.cookie)",
+        "comment": "javascript:alert(document.cookie)",
+        "review": "javascript:alert(document.cookie)"
+      },
+      "expectedResult": {
+        "statusCode": 200,
+        "sanitized": true
+      }
+    },
+    {
+      "scenarioId": "PRODUCT_XSS_004",
+      "description": "Cross-Site Scripting vector test #4",
+      "payload": "<svg/onload=alert('XSS')>",
+      "data": {
+        "name": "<svg/onload=alert('XSS')>",
+        "comment": "<svg/onload=alert('XSS')>",
+        "review": "<svg/onload=alert('XSS')>"
+      },
+      "expectedResult": {
+        "statusCode": 200,
+        "sanitized": true
+      }
+    }
+  ],
+  "expiredToken": [
+    {
+      "scenarioId": "PRODUCT_AUTH_EXPIRED_001",
+      "description": "Access using expired JWT bearer token",
+      "authHeader": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.expiredTokenPayload",
+      "expectedResult": {
+        "statusCode": 401,
+        "errorCode": "TOKEN_EXPIRED"
+      }
+    }
+  ],
+  "wrongPermission": [
+    {
+      "scenarioId": "PRODUCT_PERM_FORBIDDEN_001",
+      "description": "Customer role accessing Admin-only endpoint",
+      "userRole": "ROLE_CUSTOMER",
+      "targetAction": "ADMIN_ONLY_OPERATION",
+      "expectedResult": {
+        "statusCode": 403,
+        "errorCode": "ACCESS_DENIED"
+      }
+    }
+  ],
+  "largePayload": [
+    {
+      "scenarioId": "PRODUCT_LARGE_001",
+      "description": "5KB buffer stress payload",
+      "data": {
+        "description": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+      },
+      "expectedResult": {
+        "statusCode": 413,
+        "errorCode": "PAYLOAD_TOO_LARGE"
+      }
+    }
+  ],
+  "concurrentRequests": [
+    {
+      "scenarioId": "PRODUCT_CONCURRENT_001",
+      "description": "Simulate 50 parallel requests for race conditions",
+      "concurrencyLevel": 50,
+      "idempotencyKey": "IDEMP_PRODUCT_1786760074159",
+      "expectedResult": {
+        "raceConditionHandled": true,
+        "singleExecutionGuaranteed": true
+      }
+    }
+  ],
+  "randomData": [
+    {
+      "scenarioId": "PRODUCT_FUZZ_001",
+      "description": "Fuzz testing with pseudo-random seed",
+      "data": {
+        "randomString": "wf7ck8abfoq",
+        "randomNumber": 498471,
+        "randomTimestamp": 1786759231609
+      }
+    }
+  ]
+}
