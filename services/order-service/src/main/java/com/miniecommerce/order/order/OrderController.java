@@ -44,8 +44,26 @@ public class OrderController {
 		Authentication authentication
 	) {
 		Pageable pageable = PageRequest.of(page, Math.min(size, 100));
-		return orderService.listOrders(status, authentication, pageable);
+		return orderService.listMyOrders(status, authentication, pageable);
 	}
+
+	@GetMapping("/admin/orders")
+	@PreAuthorize("hasRole('ADMIN')")
+	Page<OrderResponse> listAdmin(
+		@RequestParam(name = "status", required = false) OrderStatus status,
+		@RequestParam(name = "page", defaultValue = "0") int page,
+		@RequestParam(name = "size", defaultValue = "20") int size
+	) {
+		Pageable pageable = PageRequest.of(page, Math.min(size, 100));
+		return orderService.listAdminOrders(status, pageable);
+	}
+
+	@GetMapping("/admin/orders/summary")
+	@PreAuthorize("hasRole('ADMIN')")
+	ResponseEntity<OrderSummaryResponse> getSummary() {
+		return ResponseEntity.ok(orderService.getSummary());
+	}
+
 
 	/**
 	 * Admin chuyển trạng thái đơn theo state machine.
@@ -70,5 +88,13 @@ public class OrderController {
 		Authentication authentication
 	) {
 		return ResponseEntity.ok(orderService.customerCancel(id, authentication));
+	}
+
+	@PostMapping("/orders/{id}/return")
+	ResponseEntity<OrderResponse> customerReturn(
+		@PathVariable UUID id,
+		Authentication authentication
+	) {
+		return ResponseEntity.ok(orderService.customerReturn(id, authentication));
 	}
 }
