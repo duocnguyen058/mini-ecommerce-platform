@@ -11,6 +11,7 @@ import jakarta.validation.constraints.Size;
 
 public record CreateProductRequest(
         @NotNull UUID categoryId,
+        UUID brandId,
         @NotBlank @Size(max = 64) String sku,
         @NotBlank @Size(max = 180) String name,
         @NotBlank
