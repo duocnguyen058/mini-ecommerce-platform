@@ -16,11 +16,11 @@ spring:
             - id: catalog-service
               uri: ${CATALOG_SERVICE_URL:http://localhost:8082}
               predicates:
-                - Path=/api/products,/api/products/**,/api/categories,/api/categories/**,/api/admin/products,/api/admin/products/**,/api/admin/categories,/api/admin/categories/**
+                - Path=/api/products,/api/products/**,/api/categories,/api/categories/**,/api/admin/products,/api/admin/products/**,/api/admin/categories,/api/admin/categories/**,/api/v1/brands,/api/v1/brands/**,/api/v1/products/**
             - id: inventory-service
               uri: ${INVENTORY_SERVICE_URL:http://localhost:8083}
               predicates:
-                - Path=/api/inventory,/api/inventory/**,/api/admin/inventory,/api/admin/inventory/**
+                - Path=/api/inventory,/api/inventory/**,/api/admin/inventory,/api/admin/inventory/**,/api/v1/inventory,/api/v1/inventory/**
             - id: cart-service
               uri: ${CART_SERVICE_URL:http://localhost:8084}
               predicates:
@@ -28,31 +28,19 @@ spring:
             - id: order-service
               uri: ${ORDER_SERVICE_URL:http://localhost:8085}
               predicates:
-                - Path=/api/checkout,/api/checkout/**,/api/orders,/api/orders/**,/api/admin/orders,/api/admin/orders/**
-          globalcors:
-            cors-configurations:
-              "[/**]":
-                allowed-origins:
-                  - ${FRONTEND_ORIGIN:http://localhost:3000}
-                  - http://localhost:3000
-                  - http://localhost:5173
-                allowed-methods:
-                  - GET
-                  - POST
-                  - PUT
-                  - PATCH
-                  - DELETE
-                  - OPTIONS
-                allowed-headers:
-                  - "*"
-                exposed-headers:
-                  - Location
-                  - X-Correlation-Id
-                allow-credentials: true
-                max-age: 3600
+                - Path=/api/checkout,/api/checkout/**,/api/orders,/api/orders/**,/api/admin/orders,/api/admin/orders/**,/api/coupons,/api/coupons/**,/api/admin/coupons,/api/admin/coupons/**
+            - id: payment-service
+              uri: ${PAYMENT_SERVICE_URL:http://localhost:8086}
+              predicates:
+                - Path=/api/payment,/api/payment/**
+            - id: notification-service
+              uri: ${NOTIFICATION_SERVICE_URL:http://localhost:8087}
+              predicates:
+                - Path=/api/notifications,/api/notifications/**,/api/v1/notifications,/api/v1/notifications/**,/api/v2/notifications,/api/v2/notifications/**
 
 server:
   port: ${SERVER_PORT:8080}
+
 
 management:
   endpoints:
