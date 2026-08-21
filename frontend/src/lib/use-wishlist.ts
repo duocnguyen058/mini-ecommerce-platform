@@ -2,13 +2,22 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
 import { toast } from "@/lib/toast";
+import { useAuth } from "@/lib/auth-context";
+import {
+  getPendingWishlistItem,
+  clearPendingWishlistItem,
+  setPendingWishlistItem,
+} from "@/lib/pending-wishlist";
 
-const WISHLIST_STORAGE_KEY = "mini_ecommerce_wishlist";
+function getWishlistKey(userId?: string | null): string {
+  return userId ? `mini_ecommerce_wishlist_${userId}` : "mini_ecommerce_wishlist_guest";
+}
 
-export function getStoredWishlist(): string[] {
+export function getStoredWishlist(userId?: string | null): string[] {
   if (typeof window === "undefined") return [];
   try {
-    const raw = localStorage.getItem(WISHLIST_STORAGE_KEY);
+    const key = getWishlistKey(userId);
+    const raw = localStorage.getItem(key);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed) ? parsed : [];
@@ -17,10 +26,11 @@ export function getStoredWishlist(): string[] {
   }
 }
 
-export function saveStoredWishlist(ids: string[]): void {
+export function saveStoredWishlist(ids: string[], userId?: string | null): void {
   if (typeof window === "undefined") return;
   try {
-    localStorage.setItem(WISHLIST_STORAGE_KEY, JSON.stringify(ids));
+    const key = getWishlistKey(userId);
+    localStorage.setItem(key, JSON.stringify(ids));
   } catch (err) {
     console.error("Failed to save wishlist:", err);
   }
@@ -43,14 +53,36 @@ const WishlistContext = createContext<WishlistContextType>({
 });
 
 export function WishlistProvider({ children }: { children: React.ReactNode }) {
+  const { user, loading: authLoading } = useAuth();
+  const userId = user?.userId ?? user?.username ?? null;
+
   const [wishlist, setWishlist] = useState<string[]>([]);
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setWishlist(getStoredWishlist());
+    if (authLoading) return;
+
+    let stored = getStoredWishlist(userId);
+
+    // Xử lý pending wishlist item (guest vừa đăng nhập)
+    const pending = getPendingWishlistItem();
+    if (pending && userId) {
+      clearPendingWishlistItem();
+      if (!stored.includes(pending.productId)) {
+        stored = [...stored, pending.productId];
+        saveStoredWishlist(stored, userId);
+        toast.success({
+          title: "Đã thêm vào yêu thích",
+          description: pending.productName
+            ? `Đã thêm ${pending.productName} vào danh sách yêu thích.`
+            : undefined,
+        });
+      }
+    }
+
+    setWishlist(stored);
     setLoaded(true);
-  }, []);
+  }, [userId, authLoading]);
 
   const isWishlisted = useCallback(
     (productId: string) => wishlist.includes(productId),
@@ -59,6 +91,20 @@ export function WishlistProvider({ children }: { children: React.ReactNode }) {
 
   const toggleWishlist = useCallback(
     (productId: string, productName?: string) => {
+      // Nếu chưa đăng nhập: lưu pending item → thông báo → chuyển hướng đăng nhập
+      if (!user) {
+        setPendingWishlistItem({ productId, productName });
+        toast.info({
+          title: "Vui lòng đăng nhập",
+          description: "Bạn cần đăng nhập để thêm sản phẩm vào danh sách yêu thích.",
+        });
+        if (typeof window !== "undefined") {
+          window.location.assign(`/login?next=${encodeURIComponent(window.location.pathname)}`);
+        }
+        return;
+      }
+
+
       setWishlist((prev) => {
         const exists = prev.includes(productId);
         let updated: string[];
@@ -75,11 +121,11 @@ export function WishlistProvider({ children }: { children: React.ReactNode }) {
             description: productName ? `Đã thêm ${productName} vào danh sách yêu thích.` : undefined,
           });
         }
-        saveStoredWishlist(updated);
+        saveStoredWishlist(updated, userId);
         return updated;
       });
     },
-    []
+    [user, userId]
   );
 
   return React.createElement(
