@@ -17,8 +17,12 @@ public record RegisterRequest(
     @Email(message = "Email không hợp lệ")
     String email,
 
-    @NotBlank(message = "Họ tên không được để trống")
-    @Size(max = 100, message = "Họ tên tối đa 100 ký tự")
+    @NotBlank(message = "Họ và tên không được để trống")
+    @Size(min = 2, max = 100, message = "Họ tên phải từ 2-100 ký tự")
+    @jakarta.validation.constraints.Pattern(
+        regexp = "^\\S+(\\s+\\S+)+$",
+        message = "Vui lòng nhập đầy đủ Họ và Tên (bao gồm cả họ và tên, ít nhất 2 từ)"
+    )
     String fullName,
 
     @Size(max = 20, message = "Số điện thoại tối đa 20 ký tự")
