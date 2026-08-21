@@ -10,6 +10,8 @@ import {
   LayoutDashboard,
   Package,
   Warehouse,
+  Users,
+  Tag,
 } from "lucide-react";
 
 import { useAuth } from "@/lib/auth-context";
@@ -54,9 +56,12 @@ const NAV_ITEMS: { href: string; label: string; icon: React.ComponentType<{ clas
   { href: "/admin", label: "Tổng quan", icon: LayoutDashboard, exact: true },
   { href: "/admin/products", label: "Sản phẩm", icon: Package },
   { href: "/admin/categories", label: "Danh mục", icon: FolderTree },
+  { href: "/admin/brands", label: "Thương hiệu", icon: Tag },
   { href: "/admin/inventory", label: "Tồn kho", icon: Warehouse },
   { href: "/admin/orders", label: "Đơn hàng", icon: Boxes },
+  { href: "/admin/users", label: "Người dùng", icon: Users },
 ];
+
 
 export function AdminLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
@@ -81,10 +86,10 @@ export function AdminLayout({ children }: { children: ReactNode }) {
                     key={item.href}
                     href={item.href}
                     className={cn(
-                      "flex items-center gap-2 rounded-md px-2.5 py-1.5 text-sm transition-colors",
+                      "flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors",
                       active
-                        ? "bg-muted font-medium text-foreground"
-                        : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                        ? "bg-blue-50 font-semibold text-blue-600 border-l-4 border-blue-600"
+                        : "text-gray-600 hover:bg-gray-50 hover:text-gray-900",
                     )}
                   >
                     <Icon className="size-4" />
