@@ -1,5 +1,3 @@
-"use client";
-
 import { useEffect, useState } from "react";
 import { Save } from "lucide-react";
 
@@ -7,8 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog } from "@/components/ui/dialog";
-import { adminProductApi } from "@/lib/api";
-import type { Product, ProductStatus } from "@/lib/types";
+import { adminProductApi, brandApi } from "@/lib/api";
+import type { Product, ProductStatus, Brand } from "@/lib/types";
 import { PRODUCT_STATUS_LABEL } from "@/lib/types";
 import { toast } from "@/lib/toast";
 
@@ -29,10 +27,16 @@ export function EditProductDialog({ product, open, onOpenChange, onSaved }: Prop
   const [description, setDescription] = useState("");
   const [price, setPrice] = useState("");
   const [status, setStatus] = useState<ProductStatus>("ACTIVE");
+  const [brandId, setBrandId] = useState<string>("");
+  const [brands, setBrands] = useState<Brand[]>([]);
   const [submitting, setSubmitting] = useState(false);
 
+  useEffect(() => {
+    brandApi.list().then((res) => setBrands(Array.isArray(res) ? res : [])).catch(() => {});
+  }, []);
+
   // Reset form khi mở dialog / đổi product.
-  /* eslint-disable react-hooks/set-state-in-effect */
+   
   useEffect(() => {
     if (open && product) {
       setName(product.name);
@@ -40,9 +44,10 @@ export function EditProductDialog({ product, open, onOpenChange, onSaved }: Prop
       setDescription(product.description ?? "");
       setPrice(String(product.price));
       setStatus(product.status);
+      setBrandId(product.brandId ?? "");
     }
   }, [open, product]);
-  /* eslint-enable react-hooks/set-state-in-effect */
+   
 
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -72,6 +77,7 @@ export function EditProductDialog({ product, open, onOpenChange, onSaved }: Prop
         description: description.trim(),
         price: priceNum,
         status,
+        brandId: brandId || undefined,
       })
       .then((updated) => {
         toast.success({ title: `Đã cập nhật "${updated.name}"` });
@@ -87,6 +93,7 @@ export function EditProductDialog({ product, open, onOpenChange, onSaved }: Prop
       )
       .finally(() => setSubmitting(false));
   }
+
 
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
@@ -143,6 +150,23 @@ export function EditProductDialog({ product, open, onOpenChange, onSaved }: Prop
                 />
               </div>
               <div className="grid gap-1.5">
+                <Label htmlFor="edit-brand">Thương hiệu</Label>
+                <select
+                  id="edit-brand"
+                  className="h-8 w-full rounded-lg border border-input bg-transparent px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                  value={brandId}
+                  onChange={(e) => setBrandId(e.target.value)}
+                >
+                  <option value="">-- Không có thương hiệu --</option>
+                  {brands.map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.name} ({b.country || "Chính hãng"})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid gap-1.5">
                 <Label htmlFor="edit-status">Trạng thái</Label>
                 <select
                   id="edit-status"
@@ -158,6 +182,7 @@ export function EditProductDialog({ product, open, onOpenChange, onSaved }: Prop
                 </select>
               </div>
             </div>
+
 
             <Dialog.Footer className="mt-2">
               <Button
