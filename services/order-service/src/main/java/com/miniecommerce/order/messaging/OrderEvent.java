@@ -18,7 +18,7 @@ import java.util.UUID;
  * @param status       trạng thái đơn sau khi chuyển.
  * @param totalAmount  tổng tiền (backend tính).
  * @param currency    mã tiền tệ.
- * @param reservationId id reservation inventory (nếu có).
+ * @param reservationIds danh sách id reservation inventory của đơn (đủ — mỗi item 1 reservation).
  * @param items        snapshot dòng item — consumer biết sản phẩm/khối lượng.
  * @param occurredAt   thời điểm tạo event (== createdAt của OutboxEvent).
  */
@@ -27,10 +27,12 @@ public record OrderEvent(
 	String eventType,
 	UUID orderId,
 	UUID userId,
+	String customerName,
+	int totalQuantity,
 	String status,
 	BigDecimal totalAmount,
 	String currency,
-	UUID reservationId,
+	List<UUID> reservationIds,
 	List<OrderItemLine> items,
 	Instant occurredAt
 ) {
