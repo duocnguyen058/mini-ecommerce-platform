@@ -5,6 +5,7 @@ import java.time.Instant;
 import java.util.UUID;
 
 import com.miniecommerce.catalog.category.Category;
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -27,8 +28,14 @@ public class Product {
     @JoinColumn(name = "category_id", nullable = false)
     private Category category;
 
+    @Column(name = "brand_id")
+    private UUID brandId;
+
     @Column(nullable = false, unique = true, length = 64)
     private String sku;
+
+    @Column(length = 64)
+    private String barcode;
 
     @Column(nullable = false, length = 180)
     private String name;
@@ -36,18 +43,75 @@ public class Product {
     @Column(nullable = false, unique = true, length = 200)
     private String slug;
 
+    @Column(name = "short_description", columnDefinition = "TEXT")
+    private String shortDescription;
+
     @Column(columnDefinition = "TEXT")
     private String description;
 
     @Column(nullable = false, precision = 19, scale = 2)
     private BigDecimal price;
 
+    @Column(name = "original_price", precision = 19, scale = 2)
+    private BigDecimal originalPrice;
+
+    @Column(name = "discount_percent")
+    private int discountPercent;
+
     @Column(name = "image_url", length = 500)
     private String imageUrl;
+
+    @Column(name = "video_url", length = 500)
+    private String videoUrl;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private ProductStatus status;
+
+    @Column(name = "weight_g")
+    private int weightG;
+
+    @Column(length = 100)
+    private String dimensions;
+
+    @Column(name = "warranty_policy", length = 255)
+    private String warrantyPolicy;
+
+    @Column(name = "origin_country", length = 80)
+    private String originCountry;
+
+    @Column(name = "view_count")
+    private long viewCount;
+
+    @Column(name = "sold_count")
+    private long soldCount;
+
+    @Column(name = "wishlist_count")
+    private long wishlistCount;
+
+    @Column(name = "rating_avg", precision = 3, scale = 2)
+    private BigDecimal ratingAvg;
+
+    @Column(name = "rating_count")
+    private int ratingCount;
+
+    @Column(name = "meta_title", length = 200)
+    private String metaTitle;
+
+    @Column(name = "meta_description", length = 500)
+    private String metaDescription;
+
+    @Column(name = "meta_keywords", length = 300)
+    private String metaKeywords;
+
+    @Column(name = "canonical_url", length = 500)
+    private String canonicalUrl;
+
+    @Column(name = "og_image", length = 500)
+    private String ogImage;
+
+    @Column(name = "structured_data", columnDefinition = "TEXT")
+    private String structuredData;
 
     @Version
     @Column(nullable = false)
@@ -64,21 +128,31 @@ public class Product {
 
     public Product(
             Category category,
+            UUID brandId,
             String sku,
             String name,
             String slug,
             String description,
             BigDecimal price,
+            BigDecimal originalPrice,
+            int discountPercent,
+            String imageUrl,
             ProductStatus status
     ) {
         this.id = UUID.randomUUID();
         this.category = category;
+        this.brandId = brandId;
         this.sku = sku;
         this.name = name;
         this.slug = slug;
         this.description = description;
         this.price = price;
+        this.originalPrice = originalPrice != null ? originalPrice : price;
+        this.discountPercent = discountPercent;
+        this.imageUrl = imageUrl;
         this.status = status;
+        this.ratingAvg = BigDecimal.valueOf(5.0);
+        this.ratingCount = 0;
         this.createdAt = Instant.now();
         this.updatedAt = this.createdAt;
     }
@@ -91,8 +165,16 @@ public class Product {
         return category;
     }
 
+    public UUID getBrandId() {
+        return brandId;
+    }
+
     public String getSku() {
         return sku;
+    }
+
+    public String getBarcode() {
+        return barcode;
     }
 
     public String getName() {
@@ -103,6 +185,10 @@ public class Product {
         return slug;
     }
 
+    public String getShortDescription() {
+        return shortDescription;
+    }
+
     public String getDescription() {
         return description;
     }
@@ -111,16 +197,84 @@ public class Product {
         return price;
     }
 
+    public BigDecimal getOriginalPrice() {
+        return originalPrice;
+    }
+
+    public int getDiscountPercent() {
+        return discountPercent;
+    }
+
     public String getImageUrl() {
         return imageUrl;
     }
 
-    public void setImageUrl(String imageUrl) {
-        this.imageUrl = imageUrl;
+    public String getVideoUrl() {
+        return videoUrl;
     }
 
     public ProductStatus getStatus() {
         return status;
+    }
+
+    public int getWeightG() {
+        return weightG;
+    }
+
+    public String getDimensions() {
+        return dimensions;
+    }
+
+    public String getWarrantyPolicy() {
+        return warrantyPolicy;
+    }
+
+    public String getOriginCountry() {
+        return originCountry;
+    }
+
+    public long getViewCount() {
+        return viewCount;
+    }
+
+    public long getSoldCount() {
+        return soldCount;
+    }
+
+    public long getWishlistCount() {
+        return wishlistCount;
+    }
+
+    public BigDecimal getRatingAvg() {
+        return ratingAvg;
+    }
+
+    public int getRatingCount() {
+        return ratingCount;
+    }
+
+    public String getMetaTitle() {
+        return metaTitle;
+    }
+
+    public String getMetaDescription() {
+        return metaDescription;
+    }
+
+    public String getMetaKeywords() {
+        return metaKeywords;
+    }
+
+    public String getCanonicalUrl() {
+        return canonicalUrl;
+    }
+
+    public String getOgImage() {
+        return ogImage;
+    }
+
+    public String getStructuredData() {
+        return structuredData;
     }
 
     public long getVersion() {
@@ -135,56 +289,38 @@ public class Product {
         return updatedAt;
     }
 
-    /**
-     * Áp dụng các thay đổi từ {@code UpdateProductRequest}. Mỗi field null trong
-     * request được hiểu là "giữ nguyên". {@code updatedAt} tăng lên khi có thay đổi.
-     * <p>
-     * SKU + category + version không đổi — chúng là định danh / identity.
-     */
+    public void setCategory(Category category) {
+        this.category = category;
+    }
+
+    public void setBrandId(UUID brandId) {
+        this.brandId = brandId;
+    }
+
+    public void setPrice(BigDecimal price) {
+        this.price = price;
+    }
+
+    public void setStatus(ProductStatus status) {
+        this.status = status;
+    }
+
     public void applyUpdates(
             String newName,
             String newSlug,
             String newDescription,
-            java.math.BigDecimal newPrice,
+            BigDecimal newPrice,
             String newImageUrl,
-            ProductStatus newStatus
+            ProductStatus newStatus,
+            UUID newBrandId
     ) {
-        boolean changed = false;
-        if (newName != null && !newName.isBlank() && !newName.equals(this.name)) {
-            this.name = newName.trim();
-            changed = true;
-        }
-        if (newSlug != null && !newSlug.isBlank() && !newSlug.equals(this.slug)) {
-            this.slug = newSlug.trim();
-            changed = true;
-        }
-        // Description cho phép set null (empty → null để DB lưu NULL thay vì "")
-        if (newDescription != null) {
-            String trimmed = newDescription.trim();
-            String normalized = trimmed.isEmpty() ? null : trimmed;
-            if (normalized == null ? this.description != null : !normalized.equals(this.description)) {
-                this.description = normalized;
-                changed = true;
-            }
-        }
-        if (newPrice != null && newPrice.signum() >= 0 && newPrice.compareTo(this.price) != 0) {
-            this.price = newPrice;
-            changed = true;
-        }
-        if (newImageUrl != null) {
-            String trimmed = newImageUrl.trim();
-            String normalized = trimmed.isEmpty() ? null : trimmed;
-            if (normalized == null ? this.imageUrl != null : !normalized.equals(this.imageUrl)) {
-                this.imageUrl = normalized;
-                changed = true;
-            }
-        }
-        if (newStatus != null && newStatus != this.status) {
-            this.status = newStatus;
-            changed = true;
-        }
-        if (changed) {
-            this.updatedAt = Instant.now();
-        }
+        if (newName != null && !newName.isBlank()) this.name = newName.trim();
+        if (newSlug != null && !newSlug.isBlank()) this.slug = newSlug.trim();
+        if (newDescription != null) this.description = newDescription.trim();
+        if (newPrice != null && newPrice.signum() >= 0) this.price = newPrice;
+        if (newImageUrl != null && !newImageUrl.isBlank()) this.imageUrl = newImageUrl.trim();
+        if (newStatus != null) this.status = newStatus;
+        if (newBrandId != null) this.brandId = newBrandId;
+        this.updatedAt = Instant.now();
     }
 }
