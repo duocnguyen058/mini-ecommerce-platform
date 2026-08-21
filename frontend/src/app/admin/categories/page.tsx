@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, Tag, RefreshCw } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
 import {
   Card,
   CardContent,
@@ -41,7 +42,7 @@ export default function AdminCategoriesPage() {
     setError(null);
     categoryApi
       .list()
-      .then(setItems)
+      .then((data) => setItems(Array.isArray(data) ? data : []))
       .catch((err) =>
         setError(err instanceof Error ? err.message : "Lỗi khi tải danh mục"),
       )
@@ -49,7 +50,6 @@ export default function AdminCategoriesPage() {
   }
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     refresh();
   }, []);
 
@@ -58,9 +58,15 @@ export default function AdminCategoriesPage() {
       .toLowerCase()
       .normalize("NFD")
       .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[đĐ]/g, "d")
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/^-|-$/g, "")
       .slice(0, 140);
+  }
+
+  function handleNameChange(val: string) {
+    setName(val);
+    setSlug(autoSlug(val));
   }
 
   function onSubmit(e: React.FormEvent) {
@@ -81,9 +87,9 @@ export default function AdminCategoriesPage() {
       .create({ name: name.trim(), slug: slug.trim() })
       .then((created) => {
         toast.success({ title: `Đã tạo danh mục "${created.name}"` });
-        setItems((prev) => [...prev, created].sort((a, b) => a.name.localeCompare(b.name, "vi")));
         setName("");
         setSlug("");
+        refresh();
       })
       .catch((err) =>
         toast.error({
@@ -95,134 +101,157 @@ export default function AdminCategoriesPage() {
       .finally(() => setSubmitting(false));
   }
 
-  // Backend chưa có DELETE category — hiển thị nút nhưng disable với tooltip.
-  const deleteDisabled = true;
+  async function handleDeleteCategory(cat: Category) {
+    if (!confirm(`Bạn có chắc muốn xóa danh mục "${cat.name}"?`)) return;
+    try {
+      await categoryApi.delete(cat.id);
+      toast.success({ title: "Đã xóa", description: `Đã xóa danh mục "${cat.name}"` });
+      refresh();
+    } catch (err: unknown) {
+      const error = err as Error;
+      toast.error({ title: "Không thể xóa danh mục", description: error.message });
+    }
+  }
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Danh mục</h1>
-        <p className="text-sm text-muted-foreground">
-          Quản lý danh mục sản phẩm. Hiện backend chỉ hỗ trợ tạo mới.
-        </p>
+      {/* Page Header */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-gray-900 flex items-center gap-2">
+            <Tag className="size-6 text-blue-600" />
+            Quản lý Danh mục
+          </h1>
+          <p className="text-sm text-gray-500 mt-1">
+            Danh sách danh mục sản phẩm trong Catalog Service ({items.length} danh mục)
+          </p>
+        </div>
+        <Button
+          onClick={refresh}
+          variant="outline"
+          size="sm"
+          className="gap-1.5 h-9"
+          disabled={loading}
+        >
+          <RefreshCw className={`size-4 ${loading ? "animate-spin" : ""}`} />
+          Làm mới
+        </Button>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Plus className="size-4" />
-            Tạo danh mục mới
-          </CardTitle>
-          <CardDescription>
-            Slug dùng cho URL (a-z, 0-9, dấu gạch ngang).
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form
-            onSubmit={onSubmit}
-            className="grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end"
-          >
-            <div className="grid gap-1.5">
-              <Label htmlFor="cat-name">Tên</Label>
-              <Input
-                id="cat-name"
-                value={name}
-                onChange={(e) => {
-                  const v = e.target.value;
-                  setName(v);
-                  if (!slug || slug === autoSlug(name)) {
-                    setSlug(autoSlug(v));
-                  }
-                }}
-                placeholder="Điện thoại"
-                required
-              />
-            </div>
-            <div className="grid gap-1.5">
-              <Label htmlFor="cat-slug">Slug</Label>
-              <Input
-                id="cat-slug"
-                value={slug}
-                onChange={(e) => setSlug(e.target.value)}
-                placeholder="dien-thoai"
-                required
-              />
-            </div>
-            <Button type="submit" disabled={submitting}>
-              {submitting ? "Đang tạo…" : "Tạo"}
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
+      <div className="grid gap-6 lg:grid-cols-3">
+        {/* Form thêm mới */}
+        <Card className="bg-white shadow-sm lg:col-span-1">
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <Plus className="size-4 text-blue-600" /> Thêm danh mục mới
+            </CardTitle>
+            <CardDescription>
+              Danh mục giúp phân loại và lọc sản phẩm trong toàn hệ thống.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={onSubmit} className="grid gap-3">
+              <div className="grid gap-1.5">
+                <Label htmlFor="cat-name" className="text-xs font-semibold">Tên danh mục *</Label>
+                <Input
+                  id="cat-name"
+                  placeholder="Ví dụ: Thiết bị số, Phụ kiện..."
+                  value={name}
+                  onChange={(e) => handleNameChange(e.target.value)}
+                  required
+                />
+              </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">
-            Danh sách ({items.length})
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {error && (
-            <div className="mb-3 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-              {error}
-            </div>
-          )}
-          {loading ? (
-            <div className="space-y-2">
-              {[0, 1, 2].map((i) => (
-                <div key={i} className="h-8 animate-pulse rounded bg-muted" />
-              ))}
-            </div>
-          ) : items.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Chưa có danh mục.</p>
-          ) : (
+              <div className="grid gap-1.5">
+                <Label htmlFor="cat-slug" className="text-xs font-semibold">Slug (URL) *</Label>
+                <Input
+                  id="cat-slug"
+                  placeholder="thiet-bi-so, phu-kien"
+                  value={slug}
+                  onChange={(e) => setSlug(e.target.value)}
+                  required
+                  className="font-mono text-xs"
+                />
+              </div>
+
+              <Button
+                type="submit"
+                disabled={submitting}
+                className="mt-2 bg-blue-600 hover:bg-blue-700 text-white"
+              >
+                <Plus className="mr-1.5 size-4" />
+                {submitting ? "Đang tạo…" : "Tạo danh mục"}
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+
+        {/* Bảng danh sách */}
+        <Card className="bg-white shadow-sm lg:col-span-2">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Danh mục hiện có</CardTitle>
+            <CardDescription>
+              Dữ liệu danh mục và số lượng sản phẩm liên kết từ Catalog Database.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="p-0">
+            {error && (
+              <div className="p-4 text-sm text-destructive">{error}</div>
+            )}
             <Table>
               <TableHeader>
-                <TableRow>
-                  <TableHead>Tên</TableHead>
+                <TableRow className="bg-gray-50">
+                  <TableHead className="w-12">#</TableHead>
+                  <TableHead>Tên danh mục</TableHead>
                   <TableHead>Slug</TableHead>
-                  <TableHead className="hidden md:table-cell">
-                    Ngày tạo
-                  </TableHead>
-                  <TableHead className="w-12 text-right">#</TableHead>
+                  <TableHead className="text-center">Số sản phẩm</TableHead>
+                  <TableHead className="text-right">Thao tác</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {items.map((c) => (
-                  <TableRow key={c.id}>
-                    <TableCell className="font-medium">{c.name}</TableCell>
-                    <TableCell>
-                      <code className="rounded bg-muted px-1.5 py-0.5 text-xs">
-                        {c.slug}
-                      </code>
-                    </TableCell>
-                    <TableCell className="hidden text-xs text-muted-foreground md:table-cell">
-                      {c.createdAt
-                        ? new Date(c.createdAt).toLocaleString("vi-VN")
-                        : "—"}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        disabled={deleteDisabled}
-                        title={
-                          deleteDisabled
-                            ? "Backend chưa hỗ trợ xoá danh mục"
-                            : "Xoá"
-                        }
-                        aria-label="Xoá danh mục"
-                      >
-                        <Trash2 className="size-4" />
-                      </Button>
+                {loading ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className="py-10 text-center text-muted-foreground">
+                      <RefreshCw className="size-5 animate-spin mx-auto mb-2 text-blue-600" />
+                      Đang tải danh mục...
                     </TableCell>
                   </TableRow>
-                ))}
+                ) : items.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className="py-10 text-center text-muted-foreground">
+                      Chưa có danh mục nào.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  items.map((cat, idx) => (
+                    <TableRow key={cat.id}>
+                      <TableCell className="text-xs text-muted-foreground">{idx + 1}</TableCell>
+                      <TableCell className="font-semibold text-gray-900">{cat.name}</TableCell>
+                      <TableCell className="font-mono text-xs text-muted-foreground">{cat.slug}</TableCell>
+                      <TableCell className="text-center">
+                        <Badge variant="secondary" className="font-semibold text-xs">
+                          {cat.productCount ?? 0}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleDeleteCategory(cat)}
+                          className="h-8 px-2 text-xs text-red-600 hover:text-red-700 hover:bg-red-50"
+                        >
+                          <Trash2 className="size-3.5 mr-1" />
+                          Xóa
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
               </TableBody>
             </Table>
-          )}
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }
