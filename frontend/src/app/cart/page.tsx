@@ -213,22 +213,23 @@ export default function CartPage() {
                     <div className="flex items-center justify-between sm:flex-col sm:items-end gap-3 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0">
                       <QuantityInput
                         value={item.quantity}
+                        max={product?.stockQuantity ? Math.max(1, product.stockQuantity) : 99}
                         onChange={(val) => updateQuantity(item.productId, val)}
                         disabled={pendingThis}
                         size="sm"
                       />
-
                       <Button
-                        type="button"
                         variant="ghost"
-                        size="sm"
-                        className="h-7 px-2 text-xs text-destructive hover:text-destructive hover:bg-destructive/10 gap-1"
-                        disabled={pendingThis}
+                        size="icon"
+                        className="size-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
                         onClick={() => removeItem(item.productId)}
+                        disabled={pendingThis}
+                        aria-label="Xóa sản phẩm"
                       >
-                        <Trash2 className="size-3.5" /> Xóa
+                        <Trash2 className="size-4" />
                       </Button>
                     </div>
+
                   </CardContent>
                 </Card>
               );
