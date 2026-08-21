@@ -17,8 +17,9 @@ public record OrderResponse(
 	OrderStatus status,
 	BigDecimal totalAmount,
 	String currency,
+	String paymentMethod,
 	Address shippingAddress,
-	UUID reservationId,
+	List<UUID> reservationIds,
 	long version,
 	Instant createdAt,
 	Instant updatedAt,
@@ -26,17 +27,25 @@ public record OrderResponse(
 ) {
 
 	public static OrderResponse from(Order order) {
-		List<OrderItemResponse> items = order.getItems().stream()
-			.map(OrderItemResponse::from)
-			.toList();
+		List<OrderItemResponse> items = order.getItems() == null
+			? List.of()
+			: order.getItems().stream()
+				.map(OrderItemResponse::from)
+				.toList();
+
+		List<UUID> reservations = order.getReservationIds() == null
+			? List.of()
+			: List.copyOf(order.getReservationIds());
+
 		return new OrderResponse(
 			order.getId(),
 			order.getUserId(),
 			order.getStatus(),
 			order.getTotalAmount(),
 			order.getCurrency(),
+			order.getPaymentMethod(),
 			order.getShippingAddress(),
-			order.getReservationId(),
+			reservations,
 			order.getVersion(),
 			order.getCreatedAt(),
 			order.getUpdatedAt(),
