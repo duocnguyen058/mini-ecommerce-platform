@@ -4,15 +4,21 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 import jakarta.persistence.CascadeType;
+import jakarta.persistence.CollectionTable;
 import jakarta.persistence.Column;
+import jakarta.persistence.ElementCollection;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.OrderBy;
 import jakarta.persistence.Table;
@@ -63,8 +69,19 @@ public class Order {
 	@Column(name = "shipping_address", columnDefinition = "jsonb")
 	private Address shippingAddress;
 
+	/** Phương thức thanh toán: COD (default) hoặc ZALOPAY. */
+	@Column(name = "payment_method", nullable = false, length = 20)
+	private String paymentMethod = "COD";
+
+	/**
+	 * Danh sách reservation inventory của đơn — mỗi item được reserve 1 reservation
+	 * khi admin duyệt (PENDING → CONFIRMED). Đơn nhiều item ⇒ nhiều reservation;
+	 * huỷ/giao sẽ confirm/cancel TẤT CẢ các id này.
+	 */
+	@ElementCollection(fetch = FetchType.LAZY)
+	@CollectionTable(name = "order_reservations", joinColumns = @JoinColumn(name = "order_id"))
 	@Column(name = "reservation_id")
-	private UUID reservationId;
+	private final Set<UUID> reservationIds = new LinkedHashSet<>();
 
 	@Version
 	@Column(nullable = false)
@@ -103,9 +120,17 @@ public class Order {
 		this.updatedAt = Instant.now();
 	}
 
-	/** Admin duyệt đơn PENDING → CONFIRMED. Lưu reservationId khi reserve thành công. */
-	public void markConfirmed(UUID reservationId, String note) {
-		this.reservationId = reservationId;
+	/**
+	 * Ghi nhận 1 reservation inventory vừa reserve thành công cho đơn
+	 * (gọi cho TỪNG item khi admin duyệt).
+	 */
+	public void addReservation(UUID reservationId) {
+		this.reservationIds.add(reservationId);
+		this.updatedAt = Instant.now();
+	}
+
+	/** Admin duyệt đơn PENDING → CONFIRMED (reservation đã được ghi trước đó). */
+	public void markConfirmed(String note) {
 		transitionTo(OrderStatus.CONFIRMED, note);
 	}
 
@@ -121,13 +146,17 @@ public class Order {
 
 	/** Admin xác nhận nhập lại kho DELIVERED → RETURNED. */
 	public void markReturned(String note) {
-		// reservationId có thể đã null (đã confirm ở DELIVERED).
+		// Reservation đã confirm ở DELIVERED — giữ danh sách để theo dõi.
 		transitionTo(OrderStatus.RETURNED, note);
 	}
 
-	/** Đơn bị huỷ — áp dụng cho PENDING/CONFIRMED/SHIPPING. Clear reservation. */
+	/**
+	 * Đơn bị huỷ — áp dụng cho PENDING/CONFIRMED/SHIPPING.
+	 * Clear danh sách reservation (caller phải lấy {@link #getReservationIds()}
+	 * TRƯỚC khi gọi nếu cần cancel ở inventory).
+	 */
 	public void markCancelled(String reason) {
-		this.reservationId = null;
+		this.reservationIds.clear();
 		transitionTo(OrderStatus.CANCELLED, reason);
 	}
 
@@ -160,8 +189,13 @@ public class Order {
 		return shippingAddress;
 	}
 
-	public UUID getReservationId() {
-		return reservationId;
+	/**
+	 * Bản sao phòng thủ của danh sách reservation — KHÔNG phải view của collection
+	 * nội bộ. Nếu trả view (unmodifiableSet trực tiếp), khi {@link #markCancelled}
+	 * clear collection thì bản "chụp" cũng rỗng theo → cancel inventory không chạy.
+	 */
+	public Set<UUID> getReservationIds() {
+		return Collections.unmodifiableSet(new LinkedHashSet<>(reservationIds));
 	}
 
 	public long getVersion() {
@@ -185,4 +219,23 @@ public class Order {
 	public boolean isOwnedBy(UUID candidateUserId) {
 		return userId != null && userId.equals(candidateUserId);
 	}
+
+	public String getPaymentMethod() { return paymentMethod; }
+
+	public void setPaymentMethod(String paymentMethod) {
+		this.paymentMethod = paymentMethod != null ? paymentMethod : "COD";
+		this.updatedAt = Instant.now();
+	}
+
+	/**
+	 * Áp dụng giảm giá từ coupon — trừ trực tiếp vào totalAmount.
+	 * Đảm bảo totalAmount không âm sau khi giảm.
+	 */
+	public void applyDiscount(java.math.BigDecimal discount) {
+		if (discount != null && discount.compareTo(java.math.BigDecimal.ZERO) > 0) {
+			this.totalAmount = this.totalAmount.subtract(discount).max(java.math.BigDecimal.ZERO);
+			this.updatedAt = Instant.now();
+		}
+	}
 }
+
