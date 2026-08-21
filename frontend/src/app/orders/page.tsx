@@ -58,7 +58,7 @@ export default function OrdersPage() {
   }, [user, status, currentPage]);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+     
     void loadOrders();
   }, [loadOrders]);
 
