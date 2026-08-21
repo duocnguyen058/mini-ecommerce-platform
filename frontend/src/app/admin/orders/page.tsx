@@ -56,7 +56,7 @@ export default function AdminOrdersPage() {
     setLoading(true);
     setError(null);
     orderApi
-      .list({
+      .listAdmin({
         status: filter === "ALL" ? undefined : filter,
         page,
         size,
@@ -75,7 +75,7 @@ export default function AdminOrdersPage() {
   }
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+     
     refresh();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, filter]);
@@ -210,8 +210,17 @@ export default function AdminOrdersPage() {
                         {o.id.slice(0, 8)}…
                       </Link>
                     </TableCell>
-                    <TableCell className="font-mono text-xs text-muted-foreground">
-                      {o.userId.slice(0, 8)}…
+                    <TableCell className="text-xs">
+                      {o.shippingAddress?.recipient ? (
+                        <div>
+                          <p className="font-medium text-gray-900">{o.shippingAddress.recipient}</p>
+                          {o.shippingAddress.phone && (
+                            <p className="text-[11px] text-muted-foreground">{o.shippingAddress.phone}</p>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="font-mono text-muted-foreground">{o.userId.slice(0, 8)}…</span>
+                      )}
                     </TableCell>
                     <TableCell className="text-xs">
                       {new Date(o.createdAt).toLocaleString("vi-VN")}
