@@ -25,21 +25,84 @@ export const PRODUCT_STATUS_BADGE_CLASS: Record<ProductStatus, string> = {
 
 export interface Category {
   id: string;
+  parentId?: string | null;
   name: string;
   slug: string;
+  icon?: string | null;
+  bannerUrl?: string | null;
+  imageUrl?: string | null;
+  metaTitle?: string | null;
+  metaDescription?: string | null;
+  productCount?: number;
   createdAt?: string;
   updatedAt?: string;
 }
 
-export interface Product {
+export interface Brand {
   id: string;
-  sku: string;
   name: string;
   slug: string;
+  logoUrl?: string | null;
+  description?: string | null;
+  country?: string | null;
+  productCount?: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface OrderSummary {
+  totalOrders: number;
+  totalRevenue: number;
+  pendingCount: number;
+  confirmedCount: number;
+  shippingCount: number;
+  deliveredCount: number;
+  cancelledCount: number;
+  returnedCount: number;
+  statusBreakdown: Record<string, number>;
+}
+
+export interface InventorySummary {
+  totalItems: number;
+  totalQuantityOnHand: number;
+  totalQuantityReserved: number;
+  totalAvailableQuantity: number;
+  outOfStockCount: number;
+  lowStockCount: number;
+}
+
+
+export interface Product {
+  id: string;
+  brandId?: string | null;
+  sku: string;
+  barcode?: string | null;
+  name: string;
+  slug: string;
+  shortDescription?: string | null;
   description: string;
   price: number;
+  originalPrice?: number | null;
+  discountPercent?: number;
   imageUrl: string | null;
+  videoUrl?: string | null;
   status: ProductStatus;
+  weightG?: number;
+  dimensions?: string | null;
+  warrantyPolicy?: string | null;
+  originCountry?: string | null;
+  viewCount?: number;
+  soldCount?: number;
+  wishlistCount?: number;
+  ratingAvg?: number;
+  ratingCount?: number;
+  metaTitle?: string | null;
+  metaDescription?: string | null;
+  metaKeywords?: string | null;
+  canonicalUrl?: string | null;
+  ogImage?: string | null;
+  structuredData?: string | null;
+  stockQuantity?: number;
   category: Category | null;
   createdAt?: string;
   updatedAt?: string;
@@ -136,8 +199,9 @@ export interface OrderResponse {
   status: OrderStatus;
   totalAmount: number;
   currency: string;
+  paymentMethod: "COD" | "ZALOPAY"; // Sync với Order.paymentMethod (BE)
   shippingAddress: Address | null;
-  reservationId: string | null;
+  reservationIds: string[];
   version: number;
   createdAt: string;
   updatedAt: string;
@@ -175,12 +239,111 @@ export interface InventoryItem {
   productId: string;
   sku: string;
   name: string;
+  totalImported?: number;
   quantityOnHand: number;
   quantityReserved: number;
   availableQuantity: number;
+  soldQuantity?: number;
   lowStockThreshold: number;
   status: InventoryStatus;
   version: number;
   createdAt?: string;
   updatedAt?: string;
+}
+
+// ---------- User Management (identity-service) ----------
+
+export interface UserResponse {
+  id: string;
+  username: string;
+  email: string;
+  fullName?: string;
+  phone?: string;
+  enabled: boolean;
+  roles: string[];
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+// ---------- Notifications (notification-service v2) ----------
+
+export interface Notification {
+  id: string;
+  userId: string;
+  title: string;
+  message: string;
+  notificationType: string; // ORDER_STATUS | PROMOTION | SYSTEM | INVENTORY
+  referenceUrl?: string | null;
+  isRead: boolean;
+  createdAt: string;
+}
+
+export interface CreateBrandRequest {
+  name: string;
+  slug: string;
+  logoUrl?: string;
+  description?: string;
+  country?: string;
+}
+
+export interface ProductVariant {
+  id: string;
+  productId: string;
+  sku: string;
+  name: string;
+  price: number;
+  originalPrice?: number | null;
+  imageUrl?: string | null;
+  stockQuantity: number;
+  attributesJson?: string | null; // JSON string: {"color":"Xanh","storage":"128GB"}
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+// ---------- Payment (payment-service) ----------
+
+export type PaymentStatus = "PENDING" | "SUCCESS" | "FAILED" | "REFUNDED";
+export type PaymentMethod = "COD" | "ZALOPAY";
+
+export interface PaymentResponse {
+  id: string;
+  orderId: string;
+  method: PaymentMethod;
+  status: PaymentStatus;
+  amount: number;
+  currency: string;
+  appTransId?: string | null;
+  zpTransId?: string | null;
+  orderUrl?: string | null; // URL redirect tới ZaloPay payment page
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ZaloPayCreateResponse {
+  orderUrl: string;       // Redirect user tới URL này
+  zpTransToken: string;   // Token ZaloPay
+  appTransId: string;     // ID giao dịch phía app
+}
+
+// ---------- Coupon (order-service) ----------
+
+export type DiscountType = "PERCENT" | "FIXED";
+
+export interface Coupon {
+  id: string;
+  code: string;
+  discountType: DiscountType;
+  discountValue: number;
+  minOrderAmount: number;
+  maxUsage: number;
+  usedCount: number;
+  expiresAt?: string | null;
+  remainingUsage: number;
+}
+
+export interface ValidateCouponResponse {
+  valid: boolean;
+  discountAmount: number;
+  code: string;
+  message: string;
 }
