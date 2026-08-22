@@ -44,6 +44,7 @@ export function AddressManager({
   const [district, setDistrict] = useState("");
   const [city, setCity] = useState("");
   const [isDefault, setIsDefault] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
 
   const activeAddr =
     addresses.find((a) => a.id === selectedAddressId) ?? defaultAddress;
@@ -57,6 +58,7 @@ export function AddressManager({
     setDistrict("");
     setCity("");
     setIsDefault(false);
+    setFormError(null);
   }
 
   function handleOpenCreate() {
@@ -73,19 +75,21 @@ export function AddressManager({
     setDistrict(addr.district ?? "");
     setCity(addr.city ?? "");
     setIsDefault(addr.isDefault ?? false);
+    setFormError(null);
     setFormOpen(true);
   }
 
   function handleSave(e: React.FormEvent) {
     e.preventDefault();
+    setFormError(null);
     try {
       const payload = {
-        recipient,
-        phone,
-        streetLine,
-        ward,
-        district,
-        city,
+        recipient: recipient.trim(),
+        phone: phone.trim(),
+        streetLine: streetLine.trim(),
+        ward: ward.trim() || undefined,
+        district: district.trim() || undefined,
+        city: city.trim() || "Việt Nam",
         country: "VN",
         isDefault,
       };
@@ -105,9 +109,11 @@ export function AddressManager({
       setFormOpen(false);
       resetForm();
     } catch (err) {
+      const msg = err instanceof Error ? err.message : "Vui lòng kiểm tra lại thông tin";
+      setFormError(msg);
       toast.error({
         title: "Lỗi địa chỉ",
-        description: err instanceof Error ? err.message : "Vui lòng kiểm tra lại thông tin",
+        description: msg,
       });
     }
   }
@@ -320,13 +326,22 @@ export function AddressManager({
             </Dialog.Header>
 
             <form onSubmit={handleSave} className="space-y-3.5 py-2">
+              {formError && (
+                <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-xs font-semibold">
+                  {formError}
+                </div>
+              )}
+
               <div className="space-y-1.5">
                 <Label htmlFor="addr-recipient">Họ và tên người nhận <span className="text-destructive">*</span></Label>
                 <Input
                   id="addr-recipient"
                   value={recipient}
-                  onChange={(e) => setRecipient(e.target.value)}
-                  placeholder="Ví dụ: Nguyễn Văn A"
+                  onChange={(e) => {
+                    setRecipient(e.target.value);
+                    if (formError) setFormError(null);
+                  }}
+                  placeholder="Ví dụ: Nguyễn Văn A hoặc Được"
                   required
                 />
               </div>
@@ -337,54 +352,57 @@ export function AddressManager({
                   id="addr-phone"
                   type="tel"
                   value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  placeholder="Ví dụ: 0901234567"
+                  onChange={(e) => {
+                    setPhone(e.target.value);
+                    if (formError) setFormError(null);
+                  }}
+                  placeholder="Ví dụ: 0912345678"
                   required
                 />
               </div>
 
               <div className="space-y-1.5">
-                <Label htmlFor="addr-street">Số nhà, Tên đường <span className="text-destructive">*</span></Label>
+                <Label htmlFor="addr-street">Địa chỉ nhận hàng (Số nhà, Tên đường đầy đủ) <span className="text-destructive">*</span></Label>
                 <Input
                   id="addr-street"
                   value={streetLine}
-                  onChange={(e) => setStreetLine(e.target.value)}
-                  placeholder="Ví dụ: 123 Đường Lê Lợi"
+                  onChange={(e) => {
+                    setStreetLine(e.target.value);
+                    if (formError) setFormError(null);
+                  }}
+                  placeholder="Ví dụ: 123 Lê Lợi, Phường Bến Nghé, Quận 1"
                   required
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <Label htmlFor="addr-ward">Phường / Xã <span className="text-destructive">*</span></Label>
+                  <Label htmlFor="addr-ward">Phường / Xã <span className="text-muted-foreground text-xs font-normal">(tùy chọn)</span></Label>
                   <Input
                     id="addr-ward"
                     value={ward}
                     onChange={(e) => setWard(e.target.value)}
                     placeholder="Phường Bến Nghé"
-                    required
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="addr-district">Quận / Huyện <span className="text-destructive">*</span></Label>
+                  <Label htmlFor="addr-district">Quận / Huyện <span className="text-muted-foreground text-xs font-normal">(tùy chọn)</span></Label>
                   <Input
                     id="addr-district"
                     value={district}
                     onChange={(e) => setDistrict(e.target.value)}
                     placeholder="Quận 1"
-                    required
                   />
                 </div>
               </div>
 
               <div className="space-y-1.5">
-                <Label htmlFor="addr-city">Tỉnh / Thành phố <span className="text-destructive">*</span></Label>
+                <Label htmlFor="addr-city">Tỉnh / Thành phố <span className="text-muted-foreground text-xs font-normal">(tùy chọn)</span></Label>
                 <Input
                   id="addr-city"
                   value={city}
                   onChange={(e) => setCity(e.target.value)}
                   placeholder="TP. Hồ Chí Minh"
-                  required
                 />
               </div>
 
