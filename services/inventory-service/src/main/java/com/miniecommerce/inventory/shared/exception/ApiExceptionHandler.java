@@ -98,4 +98,16 @@ public class ApiExceptionHandler {
 			.toList());
 		return problem;
 	}
+
+	@ExceptionHandler({org.springframework.web.method.annotation.MethodArgumentTypeMismatchException.class, IllegalArgumentException.class})
+	ProblemDetail handleTypeMismatch(Exception exception) {
+		ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+			HttpStatus.BAD_REQUEST,
+			"Tham số không hợp lệ: " + exception.getMessage()
+		);
+		problem.setTitle("Tham số không hợp lệ");
+		problem.setType(URI.create("urn:problem:bad-request"));
+		problem.setProperty("timestamp", Instant.now());
+		return problem;
+	}
 }
