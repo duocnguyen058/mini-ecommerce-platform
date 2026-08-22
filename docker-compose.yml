@@ -8,12 +8,13 @@ services:
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-ecommerce}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ecommerce_local}
-      POSTGRES_DB: ${POSTGRES_DB:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-ecommerce_db}
     ports:
       - "127.0.0.1:${POSTGRES_PORT:-5433}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./infrastructure/postgres/init:/docker-entrypoint-initdb.d:ro
+      - ./database/init:/docker-entrypoint-initdb.d:ro
+      - ./database:/database:ro
     healthcheck:
       test:
         - CMD-SHELL
@@ -69,8 +70,7 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      # identity-service vẫn hardcode trong application.properties — override qua SPRING_*
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/identity_db
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/ecommerce_db
       SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-ecommerce}
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-ecommerce_local}
       SERVER_PORT: 8081
@@ -93,7 +93,7 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      CATALOG_DB_URL: jdbc:postgresql://postgres:5432/catalog_db
+      CATALOG_DB_URL: jdbc:postgresql://postgres:5432/ecommerce_db
       CATALOG_DB_USERNAME: ${POSTGRES_USER:-ecommerce}
       CATALOG_DB_PASSWORD: ${POSTGRES_PASSWORD:-ecommerce_local}
       SERVER_PORT: 8082
@@ -116,13 +116,16 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      INVENTORY_DB_URL: jdbc:postgresql://postgres:5432/inventory_db
+      INVENTORY_DB_URL: jdbc:postgresql://postgres:5432/ecommerce_db
       INVENTORY_DB_USERNAME: ${POSTGRES_USER:-ecommerce}
       INVENTORY_DB_PASSWORD: ${POSTGRES_PASSWORD:-ecommerce_local}
       RABBITMQ_HOST: rabbitmq
       RABBITMQ_PORT: 5672
       RABBITMQ_USERNAME: ${RABBITMQ_USER:-ecommerce}
       RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-ecommerce_local}
+      # Shared secret cho service-to-service call (X-Internal-Token) — order-service
+      # gọi inventory thay khách hàng khi huỷ đơn/trả hàng.
+      INVENTORY_INTERNAL_TOKEN: ${INVENTORY_INTERNAL_TOKEN:-change-me-in-prod}
       SERVER_PORT: 8083
     ports:
       - "127.0.0.1:${INVENTORY_SERVER_PORT:-8083}:8083"
@@ -167,7 +170,7 @@ services:
       rabbitmq:
         condition: service_healthy
     environment:
-      ORDER_DB_URL: jdbc:postgresql://postgres:5432/order_db
+      ORDER_DB_URL: jdbc:postgresql://postgres:5432/ecommerce_db
       ORDER_DB_USERNAME: ${POSTGRES_USER:-ecommerce}
       ORDER_DB_PASSWORD: ${POSTGRES_PASSWORD:-ecommerce_local}
       RABBITMQ_HOST: rabbitmq
@@ -178,6 +181,8 @@ services:
       CATALOG_SERVICE_URL: http://catalog-service:8082
       INVENTORY_SERVICE_URL: http://inventory-service:8083
       CART_SERVICE_URL: http://cart-service:8084
+      # Shared secret khi gọi inventory (phải trùng với inventory-service)
+      INVENTORY_INTERNAL_TOKEN: ${INVENTORY_INTERNAL_TOKEN:-change-me-in-prod}
       OUTBOX_POLL_INTERVAL_MS: 1000
       OUTBOX_BATCH_SIZE: 50
       SERVER_PORT: 8085
@@ -190,6 +195,64 @@ services:
       retries: 10
       start_period: 60s
 
+  payment-service:
+    build:
+      context: .
+      dockerfile: services/payment-service/Dockerfile
+    image: mini-ecommerce/payment-service:latest
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PAYMENT_DB_URL: jdbc:postgresql://postgres:5432/ecommerce_db
+      PAYMENT_DB_USERNAME: ${POSTGRES_USER:-ecommerce}
+      PAYMENT_DB_PASSWORD: ${POSTGRES_PASSWORD:-ecommerce_local}
+      ORDER_SERVICE_URL: http://order-service:8085
+      # ZaloPay Sandbox credentials (thay bằng production credentials khi deploy)
+      ZALOPAY_APP_ID: ${ZALOPAY_APP_ID:-2553}
+      ZALOPAY_KEY1: ${ZALOPAY_KEY1:-PcY4iZIKFCIdgZvA6ueMcMHHUbRLYjPL}
+      ZALOPAY_KEY2: ${ZALOPAY_KEY2:-kLtgPl8YESDmyABkQgeZByOUJsbcpNI2}
+      ZALOPAY_CALLBACK_URL: ${ZALOPAY_CALLBACK_URL:-http://localhost:8086/api/payment/zalopay/callback}
+      SERVER_PORT: 8086
+    ports:
+      - "127.0.0.1:${PAYMENT_SERVER_PORT:-8086}:8086"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8086/actuator/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+
+  notification-service:
+    build:
+      context: .
+      dockerfile: services/notification-service/Dockerfile
+    image: mini-ecommerce/notification-service:latest
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      NOTIF_DB_URL: jdbc:postgresql://postgres:5432/ecommerce_db
+      NOTIF_DB_USERNAME: ${POSTGRES_USER:-ecommerce}
+      NOTIF_DB_PASSWORD: ${POSTGRES_PASSWORD:-ecommerce_local}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USERNAME: ${RABBITMQ_USER:-ecommerce}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-ecommerce_local}
+      SERVER_PORT: 8087
+    ports:
+      - "127.0.0.1:${NOTIFICATION_SERVER_PORT:-8087}:8087"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8087/actuator/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+
   api-gateway:
     build:
       context: .
@@ -197,25 +260,24 @@ services:
     image: mini-ecommerce/api-gateway:latest
     restart: unless-stopped
     depends_on:
-      identity-service:
-        condition: service_healthy
-      catalog-service:
-        condition: service_healthy
-      inventory-service:
-        condition: service_healthy
-      cart-service:
-        condition: service_healthy
-      order-service:
-        condition: service_healthy
+      - identity-service
+      - catalog-service
+      - inventory-service
+      - cart-service
+      - order-service
+      - payment-service
+      - notification-service
     environment:
       CATALOG_SERVICE_URL: http://catalog-service:8082
       IDENTITY_SERVICE_URL: http://identity-service:8081
       INVENTORY_SERVICE_URL: http://inventory-service:8083
       CART_SERVICE_URL: http://cart-service:8084
       ORDER_SERVICE_URL: http://order-service:8085
-      GATEWAY_CONNECT_TIMEOUT_MS: 3000
-      GATEWAY_RESPONSE_TIMEOUT: 5s
-      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:5173}
+      PAYMENT_SERVICE_URL: http://payment-service:8086
+      NOTIFICATION_SERVICE_URL: http://notification-service:8087
+      GATEWAY_CONNECT_TIMEOUT_MS: 5000
+      GATEWAY_RESPONSE_TIMEOUT: 30s
+      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:3000}
       SERVER_PORT: 8080
     ports:
       - "127.0.0.1:${GATEWAY_SERVER_PORT:-8080}:8080"
