@@ -34,6 +34,12 @@ public class InventoryItem {
 	@Column(name = "low_stock_threshold", nullable = false)
 	private int lowStockThreshold;
 
+	@Column(name = "sold_quantity", nullable = false)
+	private int soldQuantity = 0;
+
+	@Column(name = "total_imported", nullable = false)
+	private int totalImported = 0;
+
 	@Version
 	@Column(nullable = false)
 	private long version;
@@ -54,6 +60,8 @@ public class InventoryItem {
 		this.name = name;
 		this.quantityOnHand = quantityOnHand;
 		this.quantityReserved = 0;
+		this.soldQuantity = 0;
+		this.totalImported = quantityOnHand;
 		this.lowStockThreshold = lowStockThreshold;
 		this.createdAt = Instant.now();
 		this.updatedAt = this.createdAt;
@@ -108,6 +116,42 @@ public class InventoryItem {
 		this.updatedAt = Instant.now();
 	}
 
+	public void setLowStockThreshold(int lowStockThreshold) {
+		this.lowStockThreshold = lowStockThreshold;
+		this.updatedAt = Instant.now();
+	}
+
+	public int getSoldQuantity() {
+		return soldQuantity;
+	}
+
+	public void setSoldQuantity(int soldQuantity) {
+		this.soldQuantity = soldQuantity;
+		this.updatedAt = Instant.now();
+	}
+
+	public int getTotalImported() {
+		return totalImported > 0 ? totalImported : (quantityOnHand + soldQuantity);
+	}
+
+	public void setTotalImported(int totalImported) {
+		this.totalImported = totalImported;
+		this.updatedAt = Instant.now();
+	}
+
+	public void adjustStock(int delta) {
+		this.quantityOnHand += delta;
+		if (this.quantityOnHand < 0) {
+			this.quantityOnHand = 0;
+		}
+		if (delta < 0) {
+			this.soldQuantity += (-delta);
+		} else if (delta > 0 && this.soldQuantity >= delta) {
+			this.soldQuantity -= delta;
+		}
+		this.updatedAt = Instant.now();
+	}
+
 	public void reserve(int quantity) {
 		this.quantityReserved += quantity;
 		this.updatedAt = Instant.now();
@@ -121,6 +165,7 @@ public class InventoryItem {
 	public void confirmSale(int quantity) {
 		this.quantityOnHand -= quantity;
 		this.quantityReserved -= quantity;
+		this.soldQuantity += quantity;
 		this.updatedAt = Instant.now();
 	}
 }
