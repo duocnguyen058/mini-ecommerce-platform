@@ -1,5 +1,6 @@
 package com.miniecommerce.order.order;
 
+import java.util.Set;
 import java.util.UUID;
 
 import org.slf4j.Logger;
@@ -64,30 +65,70 @@ public class OrderService {
 	public OrderResponse getById(UUID orderId, Authentication authentication) {
 		Order order = orderRepository.findById(orderId)
 				.orElseThrow(() -> new ResourceNotFoundException("Đơn không tồn tại: " + orderId));
+		if (isAdmin(authentication)) {
+			return OrderResponse.from(order);
+		}
 		UUID callerId = userIdFrom(authentication);
-		if (!isAdmin(authentication) && !order.isOwnedBy(callerId)) {
+		if (callerId == null || !order.isOwnedBy(callerId)) {
 			throw new ResourceNotFoundException("Đơn không tồn tại: " + orderId);
 		}
 		return OrderResponse.from(order);
 	}
 
 	@Transactional(readOnly = true)
-	public Page<OrderResponse> listOrders(OrderStatus status, Authentication authentication, Pageable pageable) {
-		boolean admin = isAdmin(authentication);
+	public Page<OrderResponse> listMyOrders(OrderStatus status, Authentication authentication, Pageable pageable) {
 		UUID callerId = userIdFrom(authentication);
-
-		Page<Order> page;
-		if (admin) {
-			page = (status == null)
-					? orderRepository.findAll(pageable)
-					: orderRepository.findByStatus(status, pageable);
-		} else {
-			page = (status == null)
-					? orderRepository.findByUserId(callerId, pageable)
-					: orderRepository.findByUserIdAndStatus(callerId, status, pageable);
+		if (callerId == null) {
+			return Page.empty(pageable);
 		}
+
+		Page<Order> page = (status == null)
+				? orderRepository.findByUserId(callerId, pageable)
+				: orderRepository.findByUserIdAndStatus(callerId, status, pageable);
 		return page.map(OrderResponse::from);
 	}
+
+	@Transactional(readOnly = true)
+	public Page<OrderResponse> listAdminOrders(OrderStatus status, Pageable pageable) {
+		Page<Order> page = (status == null)
+				? orderRepository.findAll(pageable)
+				: orderRepository.findByStatus(status, pageable);
+		return page.map(OrderResponse::from);
+	}
+
+
+	@Transactional(readOnly = true)
+	public OrderSummaryResponse getSummary() {
+		long total = orderRepository.count();
+		long pending = orderRepository.countByStatus(OrderStatus.PENDING);
+		long confirmed = orderRepository.countByStatus(OrderStatus.CONFIRMED);
+		long shipping = orderRepository.countByStatus(OrderStatus.SHIPPING);
+		long delivered = orderRepository.countByStatus(OrderStatus.DELIVERED);
+		long cancelled = orderRepository.countByStatus(OrderStatus.CANCELLED);
+		long returned = orderRepository.countByStatus(OrderStatus.RETURNED);
+		java.math.BigDecimal revenue = orderRepository.calculateDeliveredRevenue();
+
+		java.util.Map<String, Long> map = new java.util.HashMap<>();
+		map.put("PENDING", pending);
+		map.put("CONFIRMED", confirmed);
+		map.put("SHIPPING", shipping);
+		map.put("DELIVERED", delivered);
+		map.put("CANCELLED", cancelled);
+		map.put("RETURNED", returned);
+
+		return new OrderSummaryResponse(
+				total,
+				revenue,
+				pending,
+				confirmed,
+				shipping,
+				delivered,
+				cancelled,
+				returned,
+				map
+		);
+	}
+
 
 	/**
 	 * Admin chuyển trạng thái đơn theo state machine. Side-effects (inventory) chạy
@@ -133,48 +174,67 @@ public class OrderService {
 	}
 
 	private void applyTransition(Order order, OrderStatus target, String note) {
+		OrderStatus previousStatus = order.getStatus();
 		switch (target) {
 			case CONFIRMED -> {
-				// Reserve inventory — từng item. Lưu reservationId đầu tiên.
-				ReservationResponse first = null;
-				for (var item : order.getItems()) {
-					ReserveRequest rq = new ReserveRequest(item.getProductId(), item.getQuantity(), order.getId());
-					ReservationResponse res = inventoryClient.reserve(rq);
-					if (first == null) first = res;
-				}
-				if (first == null) {
+				if (order.getItems().isEmpty()) {
 					throw new InvalidOrderRequestException("Đơn không có item — không thể duyệt");
 				}
-				order.markConfirmed(first.id(), note);
+				// Xác nhận reservation hoặc trừ tồn kho thực tế khi Admin duyệt đơn
+				try {
+					inventoryClient.confirmByOrderId(order.getId());
+					log.info("order {} CONFIRMED via confirmByOrderId", order.getId());
+				}
+				catch (Exception e) {
+					log.warn("confirmByOrderId fail for order {}, falling back to adjustStock: {}", order.getId(), e.getMessage());
+					for (var item : order.getItems()) {
+						try {
+							inventoryClient.adjustStock(item.getProductId(), -item.getQuantity());
+							log.info("order {} CONFIRMED adjustStock -{} for productId={}", order.getId(), item.getQuantity(), item.getProductId());
+						}
+						catch (Exception ex) {
+							log.error("order {} CONFIRMED adjustStock fail for productId={}: {}", order.getId(), item.getProductId(), ex.getMessage());
+							throw new IllegalStateException("Không thể trừ tồn kho sản phẩm " + item.getName() + ": " + ex.getMessage(), ex);
+						}
+					}
+				}
+				order.markConfirmed(note);
 			}
 			case SHIPPING -> order.markShipping(note);
-			case DELIVERED -> {
-				order.markDelivered(note);
-				// Confirm reservation ở đây — chỉ gọi 1 lần sau cùng.
-				if (order.getReservationId() != null) {
-					inventoryClient.confirm(order.getReservationId());
-				}
-			}
+			case DELIVERED -> order.markDelivered(note);
 			case CANCELLED -> {
 				order.markCancelled(note);
-				// Trả lại tồn nếu đã reserve.
-				if (order.getReservationId() != null) {
-					inventoryClient.cancel(order.getReservationId());
+				if (previousStatus == OrderStatus.PENDING) {
+					try {
+						inventoryClient.cancelByOrderId(order.getId());
+						log.info("order {} PENDING cancelByOrderId", order.getId());
+					}
+					catch (Exception ex) {
+						log.warn("order {} cancelByOrderId fail: {}", order.getId(), ex.getMessage());
+					}
+				}
+				else if (previousStatus == OrderStatus.CONFIRMED || previousStatus == OrderStatus.SHIPPING || previousStatus == OrderStatus.DELIVERED) {
+					for (var item : order.getItems()) {
+						try {
+							inventoryClient.adjustStock(item.getProductId(), item.getQuantity());
+							log.info("order {} CANCELLED adjustStock +{} for productId={}", order.getId(), item.getQuantity(), item.getProductId());
+						}
+						catch (Exception ex) {
+							log.warn("order {} CANCELLED adjustStock fail for productId={}: {}", order.getId(), item.getProductId(), ex.getMessage());
+						}
+					}
 				}
 			}
 			case RETURNED -> {
 				order.markReturned(note);
-				// Nhập hàng trở lại kho — DELIVERED đã confirm (trừ tồn thực tế),
-				// nên RETURNED cần tăng tồn bằng quantity đã đặt.
-				int totalQty = order.getItems().stream().mapToInt(item -> item.getQuantity()).sum();
-				if (totalQty > 0) {
-					UUID productId = order.getItems().getFirst().getProductId();
+				// Nhập hàng trở lại kho cho từng item khi khách trả hàng thành công
+				for (var item : order.getItems()) {
 					try {
-						inventoryClient.adjustStock(productId, totalQty);
-						log.info("order {} RETURNED adjustStock +{} for productId={}", order.getId(), totalQty, productId);
+						inventoryClient.adjustStock(item.getProductId(), item.getQuantity());
+						log.info("order {} RETURNED adjustStock +{} for productId={}", order.getId(), item.getQuantity(), item.getProductId());
 					}
 					catch (Exception ex) {
-						log.warn("order {} RETURNED adjustStock fail: {}", order.getId(), ex.getMessage());
+						log.warn("order {} RETURNED adjustStock fail for productId={}: {}", order.getId(), item.getProductId(), ex.getMessage());
 					}
 				}
 			}
@@ -184,7 +244,8 @@ public class OrderService {
 	private com.miniecommerce.order.messaging.OutboxEvent eventForTarget(Order order, OrderStatus target) {
 		return switch (target) {
 			case CONFIRMED, SHIPPING, DELIVERED -> eventFactory.confirmed(order);
-			case CANCELLED, RETURNED -> eventFactory.cancelled(order);
+			case CANCELLED -> eventFactory.cancelled(order);
+			case RETURNED -> eventFactory.returned(order);
 			default -> eventFactory.created(order);
 		};
 	}
@@ -214,20 +275,70 @@ public class OrderService {
 		}
 
 		String note = "Khách hàng huỷ đơn";
-		UUID reservationId = order.getReservationId();
 		order.markCancelled(note);
 		Order saved = orderRepository.save(order);
 
-		if (reservationId != null) {
+		if (current == OrderStatus.PENDING) {
 			try {
-				inventoryClient.cancel(reservationId);
+				inventoryClient.cancelByOrderId(saved.getId());
 			}
 			catch (Exception ex) {
-				log.warn("order {} cancel reservation fail: {}", saved.getId(), ex.getMessage());
+				log.warn("customerCancel cancelByOrderId fail for order {}: {}", saved.getId(), ex.getMessage());
+			}
+		}
+		else if (current == OrderStatus.CONFIRMED || current == OrderStatus.SHIPPING) {
+			for (var item : saved.getItems()) {
+				try {
+					inventoryClient.adjustStock(item.getProductId(), item.getQuantity());
+					log.info("order {} customerCancel adjustStock +{} for productId={}", saved.getId(), item.getQuantity(), item.getProductId());
+				}
+				catch (Exception ex) {
+					log.warn("order {} customerCancel adjustStock fail for productId={}: {}", saved.getId(), item.getProductId(), ex.getMessage());
+				}
 			}
 		}
 
 		outboxRepository.save(eventFactory.cancelled(saved));
+		return OrderResponse.from(saved);
+	}
+
+	/**
+	 * Customer (chủ đơn) yêu cầu trả hàng cho đơn DELIVERED.
+	 */
+	@Transactional
+	public OrderResponse customerReturn(UUID orderId, Authentication authentication) {
+		UUID callerId = userIdFrom(authentication);
+		if (callerId == null) {
+			throw new AccessDeniedException("Không xác định được userId từ JWT");
+		}
+
+		Order order = orderRepository.findById(orderId)
+				.orElseThrow(() -> new ResourceNotFoundException("Đơn không tồn tại: " + orderId));
+
+		if (!order.isOwnedBy(callerId) && !isAdmin(authentication)) {
+			throw new ResourceNotFoundException("Đơn không tồn tại: " + orderId);
+		}
+
+		OrderStatus current = order.getStatus();
+		if (current != OrderStatus.DELIVERED) {
+			throw new OrderStateException("Chỉ có thể yêu cầu trả hàng với đơn đã giao (DELIVERED)");
+		}
+
+		order.markReturned("Khách hàng yêu cầu trả hàng");
+		Order saved = orderRepository.save(order);
+
+		// Nhập hàng trở lại kho cho từng item khi trả hàng thành công
+		for (var item : saved.getItems()) {
+			try {
+				inventoryClient.adjustStock(item.getProductId(), item.getQuantity());
+				log.info("order {} customerReturn adjustStock +{} for productId={}", saved.getId(), item.getQuantity(), item.getProductId());
+			}
+			catch (Exception ex) {
+				log.warn("order {} customerReturn adjustStock fail for productId={}: {}", saved.getId(), item.getProductId(), ex.getMessage());
+			}
+		}
+
+		outboxRepository.save(eventFactory.returned(saved));
 		return OrderResponse.from(saved);
 	}
 
@@ -240,10 +351,32 @@ public class OrderService {
 	}
 
 	private UUID userIdFrom(Authentication authentication) {
-		if (authentication == null || !(authentication.getPrincipal() instanceof org.springframework.security.oauth2.jwt.Jwt jwt)) {
+		if (authentication == null) {
 			return null;
 		}
-		String subject = jwt.getSubject();
-		return subject == null ? null : UUID.fromString(subject);
+		if (authentication.getPrincipal() instanceof org.springframework.security.oauth2.jwt.Jwt jwt) {
+			String subject = jwt.getSubject();
+			if (subject != null && !subject.isBlank()) {
+				try {
+					return UUID.fromString(subject);
+				} catch (IllegalArgumentException ignored) {
+					// Fallback to userId claim if subject was username
+					Object claim = jwt.getClaims().get("userId");
+					if (claim != null) {
+						try {
+							return UUID.fromString(claim.toString());
+						} catch (IllegalArgumentException ignored2) {}
+					}
+				}
+			}
+		}
+		String name = authentication.getName();
+		if (name != null && !name.isBlank()) {
+			try {
+				return UUID.fromString(name);
+			} catch (IllegalArgumentException ignored) {}
+		}
+		return null;
 	}
 }
+
