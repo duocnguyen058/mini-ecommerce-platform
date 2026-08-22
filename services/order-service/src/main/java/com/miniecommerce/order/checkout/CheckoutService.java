@@ -28,6 +28,7 @@ import com.miniecommerce.order.order.Order;
 import com.miniecommerce.order.order.OrderItem;
 import com.miniecommerce.order.order.OrderRepository;
 import com.miniecommerce.order.order.OrderResponse;
+import com.miniecommerce.order.coupon.CouponService;
 import com.miniecommerce.order.shared.exception.InvalidOrderRequestException;
 import com.miniecommerce.order.shared.exception.ResourceNotFoundException;
 
@@ -60,13 +61,16 @@ public class CheckoutService {
     private final InventoryClient inventoryClient;
     private final OrderEventFactory eventFactory;
 
+    private final CouponService couponService;
+
     public CheckoutService(OrderRepository orderRepository,
                            IdempotencyRepository idempotencyRepository,
                            OutboxEventRepository outboxRepository,
                            CartClient cartClient,
                            CatalogClient catalogClient,
                            InventoryClient inventoryClient,
-                           OrderEventFactory eventFactory) {
+                           OrderEventFactory eventFactory,
+                           CouponService couponService) {
         this.orderRepository = orderRepository;
         this.idempotencyRepository = idempotencyRepository;
         this.outboxRepository = outboxRepository;
@@ -74,6 +78,7 @@ public class CheckoutService {
         this.catalogClient = catalogClient;
         this.inventoryClient = inventoryClient;
         this.eventFactory = eventFactory;
+        this.couponService = couponService;
     }
 
     @Transactional
@@ -134,6 +139,12 @@ public class CheckoutService {
 
         // Build order
         Order order = new Order(userId, request.shippingAddress(), request.currency());
+
+        // Đặt payment method (default: COD)
+        if (request.paymentMethod() != null && !request.paymentMethod().isBlank()) {
+            order.setPaymentMethod(request.paymentMethod().toUpperCase());
+        }
+
         BigDecimal total = BigDecimal.ZERO;
         for (int i = 0; i < cart.items().size(); i++) {
             CartItemSnapshot cartLine = cart.items().get(i);
@@ -144,7 +155,13 @@ public class CheckoutService {
             order.addItem(item);
             total = total.add(item.getLineTotal());
         }
-        assertTotalMatches(order, total);
+
+        // Áp dụng coupon nếu có
+        if (request.couponCode() != null && !request.couponCode().isBlank()) {
+            BigDecimal discount = couponService.applyCoupon(request.couponCode(), order.getTotalAmount());
+            order.applyDiscount(discount);
+            log.info("checkout: áp dụng coupon {} giảm {}VND", request.couponCode(), discount);
+        }
 
         // (4) Persist order + outbox order.created + idempotency record.
         orderRepository.save(order);
@@ -153,6 +170,22 @@ public class CheckoutService {
             String requestHash = hashRequest(userId, request);
             IdempotencyRecord record = new IdempotencyRecord(idempotencyKey, requestHash, order.getId());
             idempotencyRepository.save(record);
+        }
+
+        // Giữ chỗ tồn kho (ĐÃ ĐẶT tăng, KHẢ DỤNG BÁN giảm)
+        for (OrderItem item : order.getItems()) {
+            try {
+                inventoryClient.reserve(new InventoryClient.ReserveRequest(
+                    item.getProductId(),
+                    item.getQuantity(),
+                    order.getId()
+                ));
+                log.info("checkout: reserved qty={} for productId={} orderId={}",
+                    item.getQuantity(), item.getProductId(), order.getId());
+            }
+            catch (Exception ex) {
+                log.warn("checkout: reserve fail for productId={}: {}", item.getProductId(), ex.getMessage());
+            }
         }
 
         // (5) Clear cart sau khi tạo đơn thành công — fire-and-forget.
