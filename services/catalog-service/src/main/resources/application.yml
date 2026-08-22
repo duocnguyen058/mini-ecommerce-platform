@@ -2,7 +2,7 @@ spring:
   application:
     name: catalog-service
   datasource:
-    url: ${CATALOG_DB_URL:jdbc:postgresql://localhost:5433/catalog_db}
+    url: ${CATALOG_DB_URL:jdbc:postgresql://localhost:5433/ecommerce_db}
     username: ${CATALOG_DB_USERNAME:ecommerce}
     password: ${CATALOG_DB_PASSWORD:ecommerce_local}
   jpa:
@@ -13,7 +13,7 @@ spring:
       hibernate:
         format_sql: true
   flyway:
-    enabled: true
+    enabled: false
   mvc:
     problemdetails:
       enabled: true
@@ -33,4 +33,3 @@ management:
   endpoint:
     health:
       show-details: always
-
