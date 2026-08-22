@@ -10,48 +10,15 @@ export interface StoredAddress extends Address {
 
 const ADDRESS_STORAGE_KEY = "mini_ecommerce_addresses";
 
-const DEFAULT_INITIAL_ADDRESSES: StoredAddress[] = [
-  {
-    id: "addr-default-1",
-    recipient: "Nguyễn Văn A",
-    phone: "0901234567",
-    streetLine: "123 Đường Lê Lợi",
-    ward: "Phường Bến Nghé",
-    district: "Quận 1",
-    city: "TP. Hồ Chí Minh",
-    country: "VN",
-    isDefault: true,
-  },
-  {
-    id: "addr-default-2",
-    recipient: "Trần Thị B",
-    phone: "0987654321",
-    streetLine: "456 Đường Nguyễn Huệ",
-    ward: "Phường Bến Thành",
-    district: "Quận 1",
-    city: "TP. Hồ Chí Minh",
-    country: "VN",
-    isDefault: false,
-  },
-];
-
 export function getStoredAddresses(): StoredAddress[] {
-  if (typeof window === "undefined") return DEFAULT_INITIAL_ADDRESSES;
+  if (typeof window === "undefined") return [];
   try {
     const raw = localStorage.getItem(ADDRESS_STORAGE_KEY);
-    if (!raw) {
-      localStorage.setItem(
-        ADDRESS_STORAGE_KEY,
-        JSON.stringify(DEFAULT_INITIAL_ADDRESSES)
-      );
-      return DEFAULT_INITIAL_ADDRESSES;
-    }
+    if (!raw) return [];
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) && parsed.length > 0
-      ? parsed
-      : DEFAULT_INITIAL_ADDRESSES;
+    return Array.isArray(parsed) ? parsed : [];
   } catch {
-    return DEFAULT_INITIAL_ADDRESSES;
+    return [];
   }
 }
 
@@ -67,15 +34,20 @@ export function saveStoredAddresses(addresses: StoredAddress[]): void {
 export function validateAddressInput(
   addr: Partial<Address>
 ): string | null {
-  if (!addr.recipient?.trim()) return "Vui lòng nhập tên người nhận";
-  if (!addr.phone?.trim()) return "Vui lòng nhập số điện thoại";
-  if (!/^[0-9+\-\s()]{9,15}$/.test(addr.phone.trim())) {
-    return "Số điện thoại không hợp lệ (cần từ 9 - 15 chữ số)";
+  const recipient = addr.recipient?.trim() ?? "";
+  if (!recipient) return "Vui lòng nhập họ và tên người nhận";
+  if (recipient.length < 2) {
+    return "Họ và tên người nhận phải có ít nhất 2 ký tự";
   }
-  if (!addr.streetLine?.trim()) return "Vui lòng nhập số nhà, tên đường";
-  if (!addr.ward?.trim()) return "Vui lòng nhập Phường/Xã";
-  if (!addr.district?.trim()) return "Vui lòng nhập Quận/Huyện";
-  if (!addr.city?.trim()) return "Vui lòng nhập Tỉnh/Thành phố";
+  const phone = addr.phone?.trim() ?? "";
+  if (!phone) return "Vui lòng nhập số điện thoại";
+  if (!/^[0-9+\-\s()]{8,15}$/.test(phone)) {
+    return "Số điện thoại không hợp lệ (từ 8 đến 15 chữ số)";
+  }
+  const street = addr.streetLine?.trim() ?? "";
+  if (!street) {
+    return "Vui lòng nhập địa chỉ giao hàng";
+  }
   return null;
 }
 
@@ -90,7 +62,6 @@ export function useAddresses() {
   }, []);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     reload();
   }, [reload]);
 
@@ -105,6 +76,12 @@ export function useAddresses() {
       const isFirst = addresses.length === 0;
       const created: StoredAddress = {
         ...newAddr,
+        recipient: newAddr.recipient?.trim() ?? "",
+        streetLine: newAddr.streetLine?.trim() ?? "",
+        ward: newAddr.ward?.trim() || undefined,
+        district: newAddr.district?.trim() || undefined,
+        city: newAddr.city?.trim() || "Việt Nam",
+        country: newAddr.country?.trim() || "VN",
         id,
         isDefault: newAddr.isDefault ?? isFirst,
       };
