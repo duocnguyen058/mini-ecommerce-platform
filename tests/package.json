@@ -1,0 +1,33 @@
+{
+  "name": "mini-ecommerce-tests",
+  "version": "1.0.0",
+  "description": "Enterprise End-to-End, UI and Integration Testing Framework with CodeceptJS",
+  "scripts": {
+    "test": "node all.test.js",
+    "test:ui": "node all-ui.test.js",
+    "test:auth": "codeceptjs run auth/*.test.js --steps",
+    "test:user": "codeceptjs run user/*.test.js --steps",
+    "test:catalog": "codeceptjs run catalog/*.test.js --steps",
+    "test:inventory": "codeceptjs run inventory/*.test.js --steps",
+    "test:cart": "codeceptjs run cart/*.test.js --steps",
+    "test:order": "codeceptjs run order/*.test.js --steps",
+    "test:payment": "codeceptjs run payment/*.test.js --steps",
+    "test:notification": "codeceptjs run notification/*.test.js --steps",
+    "test:review": "codeceptjs run review/*.test.js --steps",
+    "test:shipping": "codeceptjs run shipping/*.test.js --steps",
+    "test:admin": "codeceptjs run admin/*.test.js --steps",
+    "test:integration": "codeceptjs run integration/*.test.js --steps",
+    "test:e2e": "codeceptjs run e2e/*.test.js --steps",
+    "test:report": "codeceptjs run --reporter mochawesome"
+  },
+  "dependencies": {
+    "axios": "^1.7.9",
+    "chai": "^4.3.10"
+  },
+  "devDependencies": {
+    "@codeceptjs/configure": "^1.0.1",
+    "clean-css": "^5.3.3",
+    "codeceptjs": "^3.6.10",
+    "playwright": "^1.49.0"
+  }
+}
