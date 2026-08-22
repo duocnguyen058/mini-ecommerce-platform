@@ -1,435 +1,545 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { ArrowDown, ArrowUp, Plus, RefreshCw } from "lucide-react";
-
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { useEffect, useState, useCallback } from "react";
+import { useSearchParams } from "next/navigation";
+import { Suspense } from "react";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { inventoryApi, productApi } from "@/lib/api";
-import type { InventoryItem, InventoryStatus, Product } from "@/lib/types";
-import { toast } from "@/lib/toast";
+  Search, RefreshCw, Package, AlertTriangle, CheckCircle,
+  Download, Upload, ChevronUp, ChevronDown, X, Plus, Minus, Settings,
+  TrendingDown, Filter
+} from "lucide-react";
 
-export default function AdminInventoryPage() {
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
+
+interface InventoryItem {
+  id: string;
+  productId: string;
+  sku: string;
+  name: string;
+  quantityOnHand: number;
+  quantityReserved: number;
+  totalImported?: number;
+  soldQuantity?: number;
+  lowStockThreshold: number;
+  version: number;
+  updatedAt: string;
+}
+
+type StockFilter = "all" | "out" | "low" | "ok";
+
+function getStockStatus(item: InventoryItem): { label: string; badge: string } {
+  const avail = item.quantityOnHand - item.quantityReserved;
+  if (avail <= 0) return { label: "Hết hàng", badge: "badge-out" };
+  if (avail <= item.lowStockThreshold) return { label: "Sắp hết", badge: "badge-low" };
+  return { label: "Còn hàng", badge: "text-green-600 bg-green-100 text-xs px-2 py-0.5 rounded-full font-medium" };
+}
+
+function AdminInventoryContent() {
+  const searchParams = useSearchParams();
+  const filterParam = (searchParams.get("filter") ?? "all") as StockFilter;
+
   const [items, setItems] = useState<InventoryItem[]>([]);
-  const [totalElements, setTotalElements] = useState(0);
-  const [totalPages, setTotalPages] = useState(0);
+  const [total, setTotal] = useState(0);
   const [page, setPage] = useState(0);
-  const [size] = useState(10);
+  const [totalPages, setTotalPages] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [searchQ, setSearchQ] = useState("");
+  const [appliedQ, setAppliedQ] = useState("");
+  const [stockFilter, setStockFilter] = useState<StockFilter>(filterParam);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
 
-  const [formOpen, setFormOpen] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-  const [products, setProducts] = useState<Product[]>([]);
+  // Bulk update states
+  const [bulkMode, setBulkMode] = useState<"set" | "increase" | "decrease">("set");
+  const [bulkValue, setBulkValue] = useState("");
+  const [bulkLoading, setBulkLoading] = useState(false);
 
-  // form state
-  const [productId, setProductId] = useState("");
-  const [sku, setSku] = useState("");
-  const [name, setName] = useState("");
-  const [quantityOnHand, setQuantityOnHand] = useState("");
-  const [lowStockThreshold, setLowStockThreshold] = useState("5");
+  // Inline edit
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editTotalImported, setEditTotalImported] = useState("");
+  const [editQty, setEditQty] = useState("");
+  const [editThreshold, setEditThreshold] = useState("");
 
-  // adjust stock state
-  const [adjustFor, setAdjustFor] = useState<InventoryItem | null>(null);
-  const [adjustDelta, setAdjustDelta] = useState("");
-  const [adjusting, setAdjusting] = useState(false);
+  // Import modal
+  const [showImport, setShowImport] = useState(false);
+  const [importText, setImportText] = useState("");
 
-  function refresh() {
+  const PAGE_SIZE = 20;
+
+  const load = useCallback(async () => {
     setLoading(true);
-    setError(null);
-    inventoryApi
-      .list({ page, size })
-      .then((p) => {
-        setItems(p.content);
-        // Backend trả Page<T> dạng wrapper {content, page:{totalElements,totalPages}}.
-        const total = p.page?.totalElements ?? 0;
-        const pages = p.page?.totalPages ?? 0;
-        setTotalElements(total);
-        setTotalPages(pages);
-      })
-      .catch((err) =>
-        setError(err instanceof Error ? err.message : "Lỗi khi tải tồn kho"),
-      )
-      .finally(() => setLoading(false));
+    try {
+      const params = new URLSearchParams();
+      params.set("page", String(page));
+      params.set("size", String(PAGE_SIZE));
+      if (appliedQ) params.set("q", appliedQ);
+      if (stockFilter !== "all") params.set("stockStatus", stockFilter.toUpperCase());
+
+      const res = await fetch(`${API_BASE}/api/inventory?${params.toString()}`);
+      if (res.ok) {
+        const data = await res.json();
+        setItems(data.content ?? []);
+        setTotal(data.page?.totalElements ?? data.totalElements ?? 0);
+        setTotalPages(data.page?.totalPages ?? data.totalPages ?? 1);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  }, [page, appliedQ, stockFilter]);
+
+  useEffect(() => { load(); }, [load]);
+
+  function toggleSelect(id: string) {
+    setSelected(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
   }
 
-  useEffect(() => {
-    productApi
-      .list({ page: 0, size: 50 })
-      .then((p) => setProducts(p.content))
-      .catch(() => {});
-  }, []);
+  function toggleAll() {
+    if (selected.size === items.length) setSelected(new Set());
+    else setSelected(new Set(items.map(i => i.id)));
+  }
 
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    refresh();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page]);
+  function startInlineEdit(item: InventoryItem) {
+    setEditingId(item.id);
+    const initialTotal = item.totalImported ?? (item.quantityOnHand + (item.soldQuantity ?? 0));
+    setEditTotalImported(String(initialTotal));
+    setEditQty(String(item.quantityOnHand));
+    setEditThreshold(String(item.lowStockThreshold));
+  }
 
-  function onSelectProduct(id: string) {
-    setProductId(id);
-    const p = products.find((x) => x.id === id);
-    if (p) {
-      setSku(p.sku);
-      setName(p.name);
+  async function saveInlineEdit(itemId: string) {
+    try {
+      const payload: { totalImported?: number; quantityOnHand?: number; lowStockThreshold: number } = {
+        lowStockThreshold: parseInt(editThreshold) || 5,
+      };
+      if (editTotalImported !== "") {
+        payload.totalImported = parseInt(editTotalImported) || 0;
+      }
+      await fetch(`${API_BASE}/api/admin/inventory/${itemId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      setEditingId(null);
+      load();
+    } catch (err) {
+      console.error(err);
     }
   }
 
-  function onCreate(e: React.FormEvent) {
-    e.preventDefault();
-    if (!productId || !sku.trim() || !name.trim() || !quantityOnHand) {
-      toast.error({ title: "Vui lòng điền đủ các trường bắt buộc" });
-      return;
+  async function handleBulkUpdate() {
+    if (!bulkValue || selected.size === 0) return;
+    const qty = parseInt(bulkValue);
+    if (isNaN(qty)) return;
+    setBulkLoading(true);
+    try {
+      const payload = [...selected].map(id => ({
+        inventoryItemId: id,
+        mode: bulkMode, // set | increase | decrease
+        quantity: qty,
+      }));
+      await fetch(`${API_BASE}/api/admin/inventory/bulk-update`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      setSelected(new Set());
+      setBulkValue("");
+      load();
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setBulkLoading(false);
     }
-    const qty = Number(quantityOnHand);
-    const threshold = Number(lowStockThreshold || "0");
-    if (!Number.isFinite(qty) || qty < 0 || !Number.isInteger(qty)) {
-      toast.error({ title: "Số lượng phải là số nguyên không âm" });
-      return;
-    }
-    if (!Number.isFinite(threshold) || threshold < 0 || !Number.isInteger(threshold)) {
-      toast.error({ title: "Ngưỡng tồn thấp phải là số nguyên không âm" });
-      return;
-    }
-    setSubmitting(true);
-    inventoryApi
-      .create({
-        productId,
-        sku: sku.trim(),
-        name: name.trim(),
-        quantityOnHand: qty,
-        lowStockThreshold: threshold,
-      })
-      .then((created) => {
-        toast.success({ title: `Đã tạo tồn kho cho "${created.name}"` });
-        setProductId("");
-        setSku("");
-        setName("");
-        setQuantityOnHand("");
-        setLowStockThreshold("5");
-        setFormOpen(false);
-        if (page === 0) refresh();
-        else setPage(0);
-      })
-      .catch((err) =>
-        toast.error({
-          title: "Lỗi khi tạo tồn kho",
-          description:
-            err instanceof Error ? err.message : "Lỗi không xác định",
-        }),
-      )
-      .finally(() => setSubmitting(false));
   }
 
-  function onAdjust(item: InventoryItem, delta: number) {
-    if (!Number.isFinite(delta) || delta === 0 || !Number.isInteger(delta)) {
-      toast.error({ title: "Số lượng điều chỉnh phải là số nguyên khác 0" });
-      return;
-    }
-    setAdjusting(true);
-    inventoryApi
-      .adjustStock(item.productId, { quantityDelta: delta })
-      .then((updated) => {
-        toast.success({
-          title: "Đã cập nhật tồn kho",
-          description: `${item.name}: ${item.quantityOnHand} → ${updated.quantityOnHand} (còn ${updated.availableQuantity} khả dụng)`,
-        });
-        setItems((prev) =>
-          prev.map((x) =>
-            x.productId === updated.productId ? updated : x,
-          ),
+  async function handleExportCSV() {
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/inventory/export?format=csv`);
+      if (res.ok) {
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `inventory-${new Date().toISOString().slice(0, 10)}.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
+      } else {
+        // Fallback: generate CSV from current page
+        const header = "ID,SKU,Tên,Tồn kho,Đã đặt,Còn lại,Ngưỡng cảnh báo";
+        const rows = items.map(i =>
+          `${i.id},${i.sku},"${i.name}",${i.quantityOnHand},${i.quantityReserved},${i.quantityOnHand - i.quantityReserved},${i.lowStockThreshold}`
         );
-        setAdjustFor(null);
-        setAdjustDelta("");
-      })
-      .catch((err) =>
-        toast.error({
-          title: "Lỗi khi điều chỉnh tồn",
-          description:
-            err instanceof Error ? err.message : "Lỗi không xác định",
-        }),
-      )
-      .finally(() => setAdjusting(false));
+        const csv = [header, ...rows].join("\n");
+        const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `inventory-${new Date().toISOString().slice(0, 10)}.csv`;
+        a.click();
+      }
+    } catch { }
   }
+
+  const summaryStats = {
+    total: items.length,
+    outOfStock: items.filter(i => i.quantityOnHand - i.quantityReserved <= 0).length,
+    lowStock: items.filter(i => {
+      const avail = i.quantityOnHand - i.quantityReserved;
+      return avail > 0 && avail <= i.lowStockThreshold;
+    }).length,
+    inStock: items.filter(i => i.quantityOnHand - i.quantityReserved > i.lowStockThreshold).length,
+  };
+
+  const allSelected = items.length > 0 && selected.size === items.length;
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-2">
+    <div className="p-6 max-w-7xl mx-auto space-y-4">
+      {/* Header */}
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Tồn kho</h1>
-          <p className="text-sm text-muted-foreground">
-            Tổng cộng {(totalElements ?? 0).toLocaleString("vi-VN")} mặt hàng.
-          </p>
+          <h1 className="text-2xl font-bold text-gray-900">Quản Lý Kho Hàng</h1>
+          <p className="text-sm text-gray-500 mt-0.5">{total.toLocaleString()} mặt hàng · Cập nhật hàng loạt, Import/Export CSV</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={refresh}>
-            <RefreshCw className="mr-1.5 size-4" />
-            Tải lại
-          </Button>
-          <Button
-            size="sm"
-            onClick={() => {
-              setProductId("");
-              setSku("");
-              setName("");
-              setQuantityOnHand("");
-              setLowStockThreshold("5");
-              setFormOpen((v) => !v);
-            }}
+          <button
+            onClick={handleExportCSV}
+            className="flex items-center gap-1.5 px-4 py-2 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 transition-colors"
           >
-            <Plus className="mr-1.5 size-4" />
-            {formOpen ? "Đóng" : "Tạo mặt hàng"}
-          </Button>
+            <Download className="size-4" /> Export CSV
+          </button>
+          <button
+            onClick={() => setShowImport(true)}
+            className="flex items-center gap-1.5 px-4 py-2 border border-green-200 text-green-600 rounded-lg text-sm hover:bg-green-50 transition-colors"
+          >
+            <Upload className="size-4" /> Import CSV
+          </button>
+          <button onClick={() => load()} className="p-2 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 transition-colors">
+            <RefreshCw className="size-4" />
+          </button>
         </div>
       </div>
 
-      {formOpen && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Tạo mặt hàng tồn kho</CardTitle>
-            <CardDescription>
-              Mỗi productId chỉ có 1 inventory item (1-1 với product trong catalog).
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={onCreate} className="grid gap-3 sm:grid-cols-2">
-              <div className="grid gap-1.5">
-                <Label htmlFor="inv-product">Sản phẩm</Label>
-                <select
-                  id="inv-product"
-                  className="h-8 w-full rounded-lg border border-input bg-transparent px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-                  value={productId}
-                  onChange={(e) => onSelectProduct(e.target.value)}
-                  required
-                >
-                  <option value="">— Chọn sản phẩm —</option>
-                  {products.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name} ({p.sku})
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="grid gap-1.5">
-                <Label htmlFor="inv-sku">SKU</Label>
-                <Input
-                  id="inv-sku"
-                  value={sku}
-                  onChange={(e) => setSku(e.target.value.toUpperCase())}
-                  required
-                />
-              </div>
-              <div className="grid gap-1.5 sm:col-span-2">
-                <Label htmlFor="inv-name">Tên hiển thị</Label>
-                <Input
-                  id="inv-name"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  required
-                />
-              </div>
-              <div className="grid gap-1.5">
-                <Label htmlFor="inv-qty">Số lượng tồn ban đầu</Label>
-                <Input
-                  id="inv-qty"
-                  type="number"
-                  min={0}
-                  step={1}
-                  value={quantityOnHand}
-                  onChange={(e) => setQuantityOnHand(e.target.value)}
-                  required
-                />
-              </div>
-              <div className="grid gap-1.5">
-                <Label htmlFor="inv-thr">Ngưỡng sắp hết</Label>
-                <Input
-                  id="inv-thr"
-                  type="number"
-                  min={0}
-                  step={1}
-                  value={lowStockThreshold}
-                  onChange={(e) => setLowStockThreshold(e.target.value)}
-                />
-              </div>
-              <div className="sm:col-span-2">
-                <Button type="submit" disabled={submitting}>
-                  {submitting ? "Đang tạo…" : "Tạo mặt hàng"}
-                </Button>
-              </div>
-            </form>
-          </CardContent>
-        </Card>
+      {/* Summary Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {[
+          { label: "Tổng mặt hàng", count: summaryStats.total, icon: Package, color: "text-blue-500 bg-blue-100", filter: "all" },
+          { label: "Còn hàng", count: summaryStats.inStock, icon: CheckCircle, color: "text-green-500 bg-green-100", filter: "ok" },
+          { label: "Sắp hết", count: summaryStats.lowStock, icon: AlertTriangle, color: "text-amber-500 bg-amber-100", filter: "low" },
+          { label: "Hết hàng", count: summaryStats.outOfStock, icon: TrendingDown, color: "text-red-500 bg-red-100", filter: "out" },
+        ].map(({ label, count, icon: Icon, color, filter }) => (
+          <button
+            key={label}
+            onClick={() => { setStockFilter(filter as StockFilter); setPage(0); }}
+            className={`bg-white rounded-xl border p-4 text-left transition-all shadow-sm ${stockFilter === filter ? "border-red-300 ring-1 ring-red-200" : "border-gray-100 hover:border-gray-300"}`}
+          >
+            <div className={`w-8 h-8 rounded-lg ${color} flex items-center justify-center mb-2`}>
+              <Icon className="size-4" />
+            </div>
+            <div className="text-xl font-bold text-gray-900">{count}</div>
+            <div className="text-xs text-gray-500 mt-0.5">{label}</div>
+          </button>
+        ))}
+      </div>
+
+      {/* Search */}
+      <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 flex gap-3">
+        <form
+          onSubmit={(e) => { e.preventDefault(); setAppliedQ(searchQ); setPage(0); }}
+          className="flex gap-2 flex-1"
+        >
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Tìm theo tên hoặc SKU..."
+              value={searchQ}
+              onChange={e => setSearchQ(e.target.value)}
+              className="w-full pl-9 pr-3 py-2 text-sm rounded-lg border border-gray-200 outline-none focus:border-red-400"
+            />
+          </div>
+          <button type="submit" className="px-4 py-2 bg-red-500 text-white text-sm rounded-lg hover:bg-red-600 transition-colors">
+            Tìm
+          </button>
+          {appliedQ && (
+            <button type="button" onClick={() => { setAppliedQ(""); setSearchQ(""); }} className="px-3 py-2 border border-gray-200 rounded-lg text-gray-500 hover:bg-gray-50">
+              <X className="size-4" />
+            </button>
+          )}
+        </form>
+
+        {/* Stock filter tabs */}
+        <div className="flex gap-1.5">
+          {(["all", "ok", "low", "out"] as StockFilter[]).map(f => (
+            <button
+              key={f}
+              onClick={() => { setStockFilter(f); setPage(0); }}
+              className={`px-3 py-1.5 text-xs rounded-lg font-medium transition-colors ${
+                stockFilter === f
+                  ? "bg-red-500 text-white"
+                  : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+              }`}
+            >
+              {f === "all" ? "Tất cả" : f === "ok" ? "Còn hàng" : f === "low" ? "Sắp hết" : "Hết hàng"}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Bulk Update */}
+      {selected.size > 0 && (
+        <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex items-center gap-3 flex-wrap animate-fade-in-up">
+          <span className="text-sm font-semibold text-blue-700">Đã chọn {selected.size} mặt hàng</span>
+          <div className="flex items-center gap-2 flex-wrap">
+            <select
+              value={bulkMode}
+              onChange={e => setBulkMode(e.target.value as any)}
+              className="text-sm border border-gray-200 rounded-lg px-2 py-1.5 outline-none focus:border-blue-400"
+            >
+              <option value="set">Thiết lập số lượng</option>
+              <option value="increase">Tăng số lượng</option>
+              <option value="decrease">Giảm số lượng</option>
+            </select>
+            <input
+              type="number"
+              min="0"
+              placeholder="Nhập số lượng..."
+              value={bulkValue}
+              onChange={e => setBulkValue(e.target.value)}
+              className="w-36 px-3 py-1.5 text-sm border border-gray-200 rounded-lg outline-none focus:border-blue-400"
+            />
+            <button
+              onClick={handleBulkUpdate}
+              disabled={!bulkValue || bulkLoading}
+              className="px-4 py-1.5 bg-blue-500 text-white text-sm rounded-lg hover:bg-blue-600 disabled:opacity-50 transition-colors flex items-center gap-1.5"
+            >
+              {bulkMode === "set" ? <Settings className="size-3.5" /> :
+               bulkMode === "increase" ? <Plus className="size-3.5" /> :
+               <Minus className="size-3.5" />}
+              {bulkLoading ? "Đang cập nhật..." : "Áp dụng"}
+            </button>
+            <button onClick={() => setSelected(new Set())} className="px-3 py-1.5 border border-gray-200 text-gray-600 text-sm rounded-lg hover:bg-gray-50">
+              Bỏ chọn
+            </button>
+          </div>
+        </div>
       )}
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">
-            Danh sách ({items.length} / {totalElements})
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {error && (
-            <div className="mb-3 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-              {error}
-            </div>
-          )}
-          {loading ? (
-            <div className="space-y-2">
-              {[0, 1, 2].map((i) => (
-                <div key={i} className="h-10 animate-pulse rounded bg-muted" />
-              ))}
-            </div>
-          ) : items.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              Chưa có mặt hàng tồn kho. Tạo một mặt hàng để bắt đầu.
-            </p>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Sản phẩm</TableHead>
-                  <TableHead>SKU</TableHead>
-                  <TableHead className="text-right">Tồn</TableHead>
-                  <TableHead className="text-right">Đã giữ</TableHead>
-                  <TableHead className="text-right">Khả dụng</TableHead>
-                  <TableHead>Trạng thái</TableHead>
-                  <TableHead className="text-right">Thao tác</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {items.map((it) => (
-                  <TableRow key={it.id}>
-                    <TableCell className="font-medium">{it.name}</TableCell>
-                    <TableCell>
-                      <code className="rounded bg-muted px-1.5 py-0.5 text-xs">
-                        {it.sku}
-                      </code>
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {it.quantityOnHand}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums text-muted-foreground">
-                      {it.quantityReserved}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums font-medium">
-                      {it.availableQuantity}
-                    </TableCell>
-                    <TableCell>
-                      <InventoryStatusBadge status={it.status} />
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {adjustFor?.id === it.id ? (
-                        <div className="flex items-center justify-end gap-1">
-                          <Input
+      {/* Table */}
+      <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full admin-table">
+            <thead>
+              <tr>
+                <th className="w-10 text-center">
+                  <button onClick={toggleAll} className="text-gray-400 hover:text-gray-600">
+                    {allSelected ? "☑" : "☐"}
+                  </button>
+                </th>
+                <th className="text-left">Sản phẩm</th>
+                <th className="text-left">SKU</th>
+                <th className="text-right">Tổng nhập</th>
+                <th className="text-right">Tồn kho thực tế</th>
+                <th className="text-right">Đã đặt</th>
+                <th className="text-right">Khả dụng bán</th>
+                <th className="text-right">Đã bán</th>
+                <th className="text-left">Trạng thái</th>
+                <th className="text-right">Ngưỡng cảnh báo</th>
+                <th className="text-right">Thao tác</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                Array.from({ length: 8 }).map((_, i) => (
+                  <tr key={i}>
+                    <td colSpan={11}><div className="skeleton h-12 rounded mx-4 my-1" /></td>
+                  </tr>
+                ))
+              ) : items.length === 0 ? (
+                <tr>
+                  <td colSpan={11} className="py-12 text-center text-gray-400">Không có dữ liệu kho hàng</td>
+                </tr>
+              ) : (
+                items.map((item) => {
+                  const totalInitial = item.quantityOnHand + (item.soldQuantity ?? 0);
+                  const avail = item.quantityOnHand - item.quantityReserved;
+                  const status = getStockStatus(item);
+                  const isEditing = editingId === item.id;
+                  return (
+                    <tr key={item.id} className={selected.has(item.id) ? "bg-blue-50/40" : ""}>
+                      <td className="text-center">
+                        <button onClick={() => toggleSelect(item.id)} className="text-gray-400 hover:text-gray-600">
+                          {selected.has(item.id) ? "☑" : "☐"}
+                        </button>
+                      </td>
+                      <td>
+                        <span className="text-sm font-medium text-gray-800 truncate max-w-48 block">{item.name}</span>
+                      </td>
+                      <td><span className="font-mono text-xs text-gray-500">{item.sku}</span></td>
+                      <td className="text-right">
+                        {isEditing ? (
+                          <input
                             type="number"
-                            className="h-7 w-20 text-xs"
-                            placeholder="+/- n"
-                            value={adjustDelta}
-                            onChange={(e) => setAdjustDelta(e.target.value)}
+                            min={item.soldQuantity ?? 0}
+                            value={editTotalImported}
+                            onChange={e => {
+                              const val = e.target.value;
+                              setEditTotalImported(val);
+                              const total = parseInt(val) || 0;
+                              const sold = item.soldQuantity ?? 0;
+                              setEditQty(String(Math.max(0, total - sold)));
+                            }}
+                            className="w-20 px-2 py-1 text-sm border border-blue-400 rounded-lg outline-none text-right font-semibold text-blue-600"
+                            placeholder="Tổng nhập"
                           />
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            disabled={adjusting}
-                            onClick={() =>
-                              onAdjust(it, Number(adjustDelta))
-                            }
-                          >
-                            Lưu
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => {
-                              setAdjustFor(null);
-                              setAdjustDelta("");
-                            }}
-                          >
-                            Huỷ
-                          </Button>
+                        ) : (
+                          <span className="text-sm font-semibold text-blue-600">{(item.totalImported ?? totalInitial).toLocaleString()}</span>
+                        )}
+                      </td>
+                      <td className="text-right">
+                        {isEditing ? (
+                          <span className="text-sm font-semibold text-gray-800 bg-gray-100 px-2 py-1 rounded">
+                            {Math.max(0, (parseInt(editTotalImported) || 0) - (item.soldQuantity ?? 0)).toLocaleString()}
+                          </span>
+                        ) : (
+                          <span className="text-sm font-semibold text-gray-800">{item.quantityOnHand.toLocaleString()}</span>
+                        )}
+                      </td>
+                      <td className="text-right">
+                        <span className="text-sm text-gray-500">{item.quantityReserved.toLocaleString()}</span>
+                      </td>
+                      <td className="text-right">
+                        <span className={`text-sm font-bold ${avail <= 0 ? "text-red-500" : avail <= item.lowStockThreshold ? "text-amber-500" : "text-green-600"}`}>
+                          {avail.toLocaleString()}
+                        </span>
+                      </td>
+                      <td className="text-right">
+                        <span className="text-sm font-medium text-purple-600">{(item.soldQuantity ?? 0).toLocaleString()}</span>
+                      </td>
+                      <td>
+                        <span className={status.badge}>{status.label}</span>
+                      </td>
+                      <td className="text-right">
+                        {isEditing ? (
+                          <input
+                            type="number"
+                            min="0"
+                            value={editThreshold}
+                            onChange={e => setEditThreshold(e.target.value)}
+                            className="w-20 px-2 py-1 text-sm border border-amber-300 rounded-lg outline-none text-right"
+                          />
+                        ) : (
+                          <span className="text-sm text-gray-500">{item.lowStockThreshold}</span>
+                        )}
+                      </td>
+                      <td>
+                        <div className="flex items-center justify-end gap-1">
+                          {isEditing ? (
+                            <>
+                              <button
+                                onClick={() => saveInlineEdit(item.id)}
+                                className="p-1.5 text-green-500 hover:bg-green-50 rounded-lg transition-colors"
+                              >
+                                ✓
+                              </button>
+                              <button
+                                onClick={() => setEditingId(null)}
+                                className="p-1.5 text-gray-400 hover:bg-gray-50 rounded-lg transition-colors"
+                              >
+                                ✕
+                              </button>
+                            </>
+                          ) : (
+                            <button
+                              onClick={() => startInlineEdit(item)}
+                              className="p-1.5 text-amber-500 hover:bg-amber-50 rounded-lg transition-colors text-xs font-medium"
+                            >
+                              Chỉnh
+                            </button>
+                          )}
                         </div>
-                      ) : (
-                        <div className="flex justify-end gap-1">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => {
-                              setAdjustFor(it);
-                              setAdjustDelta("");
-                            }}
-                            title="Điều chỉnh tồn (+/-)"
-                          >
-                            <ArrowUp className="size-3" />
-                            <ArrowDown className="size-3" />
-                            <span className="ml-1">Điều chỉnh</span>
-                          </Button>
-                        </div>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
 
-          {totalPages > 1 && (
-            <div className="mt-4 flex items-center justify-between text-sm">
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={page === 0}
-                onClick={() => setPage((p) => Math.max(0, p - 1))}
-              >
-                Trang trước
-              </Button>
-              <span className="text-muted-foreground">
-                Trang {page + 1} / {totalPages}
-              </span>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={page >= totalPages - 1}
-                onClick={() => setPage((p) => p + 1)}
-              >
-                Trang sau
-              </Button>
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between px-5 py-3 border-t border-gray-100">
+            <span className="text-sm text-gray-500">Trang {page + 1} / {totalPages}</span>
+            <div className="flex gap-1.5">
+              <button disabled={page === 0} onClick={() => setPage(p => p - 1)} className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-40">← Trước</button>
+              <button disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)} className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-40">Tiếp →</button>
             </div>
-          )}
-        </CardContent>
-      </Card>
+          </div>
+        )}
+      </div>
+
+      {/* Import CSV Modal */}
+      {showImport && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl p-6 max-w-lg w-full space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-bold text-gray-900">Import dữ liệu kho</h3>
+              <button onClick={() => setShowImport(false)} className="text-gray-400 hover:text-gray-600">
+                <X className="size-5" />
+              </button>
+            </div>
+            <p className="text-sm text-gray-500">
+              Dán dữ liệu CSV (định dạng: SKU,Số_lượng) hoặc tải file CSV lên.
+            </p>
+            <textarea
+              rows={8}
+              placeholder={"SKU-100001,150\nSKU-100002,80\nSKU-100003,0"}
+              value={importText}
+              onChange={e => setImportText(e.target.value)}
+              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl outline-none focus:border-red-400 font-mono resize-none"
+            />
+            <div className="flex gap-3">
+              <button
+                onClick={async () => {
+                  const lines = importText.split("\n").filter(Boolean);
+                  const payload = lines.map(line => {
+                    const [sku, qty] = line.split(",");
+                    return { sku: sku?.trim(), quantity: parseInt(qty?.trim() ?? "0") };
+                  }).filter(p => p.sku && !isNaN(p.quantity));
+                  try {
+                    await fetch(`${API_BASE}/api/admin/inventory/import`, {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify(payload),
+                    });
+                    setShowImport(false);
+                    setImportText("");
+                    load();
+                  } catch {}
+                }}
+                className="flex-1 py-2 bg-green-500 text-white text-sm rounded-xl hover:bg-green-600 transition-colors"
+              >
+                Import ({importText.split("\n").filter(Boolean).length} dòng)
+              </button>
+              <button onClick={() => setShowImport(false)} className="px-4 py-2 border border-gray-200 text-gray-600 text-sm rounded-xl hover:bg-gray-50">
+                Hủy
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-function InventoryStatusBadge({ status }: { status: InventoryStatus }) {
-  const cls =
-    status === "IN_STOCK"
-      ? "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300"
-      : status === "LOW_STOCK"
-      ? "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-300"
-      : "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300";
-  const label =
-    status === "IN_STOCK"
-      ? "Còn hàng"
-      : status === "LOW_STOCK"
-      ? "Sắp hết"
-      : "Hết hàng";
-  return <Badge className={cls}>{label}</Badge>;
+export default function AdminInventoryPage() {
+  return (
+    <Suspense fallback={<div className="p-6 text-gray-400">Đang tải...</div>}>
+      <AdminInventoryContent />
+    </Suspense>
+  );
 }
