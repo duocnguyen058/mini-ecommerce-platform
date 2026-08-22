@@ -23,8 +23,8 @@ import jakarta.validation.constraints.Size;
  * @param userId     tùy chọn — id khách hàng nếu có.
  */
 public record Address(
-	@NotBlank(message = "Tên người nhận không được để trống")
-	@Size(max = 100, message = "Tên người nhận tối đa 100 ký tự")
+	@NotBlank(message = "Họ và tên người nhận không được để trống")
+	@Size(min = 2, max = 100, message = "Họ và tên người nhận phải từ 2-100 ký tự")
 	String recipient,
 
 	@NotBlank(message = "Số điện thoại không được để trống")
@@ -32,20 +32,17 @@ public record Address(
 	@Pattern(regexp = "^[0-9+\\-\\s()]+$", message = "Số điện thoại không hợp lệ")
 	String phone,
 
-	@NotBlank(message = "Số nhà, tên đường không được để trống")
-	@Size(max = 200, message = "Số nhà, tên đường tối đa 200 ký tự")
+	@NotBlank(message = "Địa chỉ giao hàng không được để trống")
+	@Size(max = 500, message = "Địa chỉ tối đa 500 ký tự")
 	String streetLine,
 
-	@NotBlank(message = "Tỉnh/Thành phố không được để trống")
-	@Size(max = 80, message = "Tỉnh/Thành phố tối đa 80 ký tự")
+	@Size(max = 100, message = "Tỉnh/Thành phố tối đa 100 ký tự")
 	String city,
 
-	@NotBlank(message = "Quận/Huyện không được để trống")
-	@Size(max = 80, message = "Quận/Huyện tối đa 80 ký tự")
+	@Size(max = 100, message = "Quận/Huyện tối đa 100 ký tự")
 	String district,
 
-	@NotBlank(message = "Phường/Xã không được để trống")
-	@Size(max = 80, message = "Phường/Xã tối đa 80 ký tự")
+	@Size(max = 100, message = "Phường/Xã tối đa 100 ký tự")
 	String ward,
 
 	String country,
@@ -55,6 +52,9 @@ public record Address(
 	public Address {
 		if (country == null || country.isBlank()) {
 			country = "VN";
+		}
+		if (city == null || city.isBlank()) {
+			city = "Việt Nam";
 		}
 	}
 }
