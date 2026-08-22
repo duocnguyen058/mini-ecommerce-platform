@@ -42,3 +42,8 @@ build/
 ### Logs ###
 *.log
 logs/
+
+# Dependencies & Build Outputs
+node_modules/
+tests/output/
+.next/
