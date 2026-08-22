@@ -2,7 +2,7 @@ spring:
   application:
     name: order-service
   datasource:
-    url: ${ORDER_DB_URL:jdbc:postgresql://localhost:5433/order_db}
+    url: ${ORDER_DB_URL:jdbc:postgresql://localhost:5433/ecommerce_db}
     username: ${ORDER_DB_USERNAME:ecommerce}
     password: ${ORDER_DB_PASSWORD:ecommerce_local}
   jpa:
@@ -13,7 +13,7 @@ spring:
       hibernate:
         format_sql: true
   flyway:
-    enabled: true
+    enabled: false
   rabbitmq:
     host: ${RABBITMQ_HOST:localhost}
     port: ${RABBITMQ_PORT:5672}
@@ -37,6 +37,10 @@ clients:
     base-url: ${INVENTORY_SERVICE_URL:http://localhost:8083}
   cart:
     base-url: ${CART_SERVICE_URL:http://localhost:8084}
+
+app:
+  inventory:
+    internal-token: ${INVENTORY_INTERNAL_TOKEN:change-me-in-prod}
 
 outbox:
   poll-interval-ms: ${OUTBOX_POLL_INTERVAL_MS:1000}
