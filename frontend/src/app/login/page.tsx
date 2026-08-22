@@ -1,17 +1,21 @@
 "use client";
 
-import { useState, Suspense } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useState, useEffect, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
+import { ShoppingCart, Heart } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/lib/auth-context";
 import { toast } from "@/lib/toast";
+import { getPendingCartItem } from "@/lib/pending-cart";
+import { getPendingWishlistItem } from "@/lib/pending-wishlist";
+import type { PendingCartItem } from "@/lib/pending-cart";
+import type { PendingWishlistItem } from "@/lib/pending-wishlist";
 
 function LoginForm() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const next = searchParams.get("next") || "/";
   const { login } = useAuth();
@@ -19,35 +23,74 @@ function LoginForm() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [pendingCartItem, setPendingCartItem] = useState<PendingCartItem | null>(null);
+  const [pendingWishlistItem, setPendingWishlistItem] = useState<PendingWishlistItem | null>(null);
+
+  useEffect(() => {
+    setPendingCartItem(getPendingCartItem());
+    setPendingWishlistItem(getPendingWishlistItem());
+  }, []);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    setErrorMsg(null);
     if (!username.trim() || !password) {
-      toast.warning({ title: "Thiếu thông tin", description: "Vui lòng nhập username và mật khẩu." });
+      setErrorMsg("Vui lòng nhập tên đăng nhập và mật khẩu.");
       return;
     }
     setSubmitting(true);
     try {
       await login({ username: username.trim(), password });
       toast.success({ title: "Đăng nhập thành công" });
-      router.push(next);
+      window.location.href = next;
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Đăng nhập thất bại";
-      toast.error({ title: "Đăng nhập thất bại", description: msg });
+      const lower = msg.toLowerCase();
+      setErrorMsg(
+        lower.includes("invalid") || lower.includes("credentials") || lower.includes("sai") || lower.includes("authentication failed") || lower.includes("không đúng")
+          ? "Tên đăng nhập hoặc mật khẩu không đúng."
+          : msg
+      );
     } finally {
       setSubmitting(false);
     }
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-md flex-col justify-center px-4 py-12 sm:px-6">
-      <Card>
+    <div className="w-full max-w-md mx-auto">
+      <Card className="shadow-lg border-border/80 bg-white">
         <CardHeader>
           <CardTitle>Đăng nhập</CardTitle>
           <CardDescription>Đăng nhập để đặt hàng và xem lịch sử đơn.</CardDescription>
         </CardHeader>
         <form onSubmit={handleSubmit}>
           <CardContent className="space-y-4">
+            {pendingCartItem && (
+              <div className="flex items-center gap-3 rounded-md bg-blue-50 p-3 text-sm text-blue-700 border border-blue-200">
+                <ShoppingCart className="size-4 shrink-0" />
+                <span>
+                  Đăng nhập để thêm{" "}
+                  <strong>{pendingCartItem.productName ?? "sản phẩm"}</strong>
+                  {" "}vào giỏ hàng của bạn.
+                </span>
+              </div>
+            )}
+            {!pendingCartItem && pendingWishlistItem && (
+              <div className="flex items-center gap-3 rounded-md bg-pink-50 p-3 text-sm text-pink-700 border border-pink-200">
+                <Heart className="size-4 shrink-0 fill-pink-500 text-pink-500" />
+                <span>
+                  Đăng nhập để thêm{" "}
+                  <strong>{pendingWishlistItem.productName ?? "sản phẩm"}</strong>
+                  {" "}vào danh sách yêu thích của bạn.
+                </span>
+              </div>
+            )}
+            {errorMsg && (
+              <div className="rounded-md bg-red-50 p-3 text-sm text-red-600 border border-red-200 font-medium">
+                ⚠️ {errorMsg}
+              </div>
+            )}
             <div className="space-y-1.5">
               <Label htmlFor="username">Tên đăng nhập</Label>
               <Input
@@ -55,7 +98,7 @@ function LoginForm() {
                 type="text"
                 autoComplete="username"
                 value={username}
-                onChange={(e) => setUsername(e.target.value)}
+                onChange={(e) => { setUsername(e.target.value); setErrorMsg(null); }}
                 placeholder="vd: nguyen_van_a"
                 disabled={submitting}
                 required
@@ -68,7 +111,7 @@ function LoginForm() {
                 type="password"
                 autoComplete="current-password"
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={(e) => { setPassword(e.target.value); setErrorMsg(null); }}
                 disabled={submitting}
                 required
               />
@@ -80,10 +123,7 @@ function LoginForm() {
             </Button>
             <p className="text-center text-sm text-muted-foreground">
               Chưa có tài khoản?{" "}
-              <Link
-                href={`/register${next !== "/" ? `?next=${encodeURIComponent(next)}` : ""}`}
-                className="font-medium text-primary hover:underline"
-              >
+              <Link href="/register" className="font-medium text-primary hover:underline">
                 Đăng ký
               </Link>
             </p>
@@ -95,10 +135,11 @@ function LoginForm() {
 }
 
 export default function LoginPage() {
-  // useSearchParams() cần Suspense boundary trong Next 16 App Router
   return (
-    <Suspense fallback={<div className="mx-auto max-w-md px-4 py-12">Đang tải...</div>}>
-      <LoginForm />
-    </Suspense>
+    <div className="flex-1 flex items-center justify-center w-full min-h-[calc(100vh-220px)] py-12 px-4">
+      <Suspense fallback={<div className="mx-auto max-w-md px-4 py-12">Đang tải...</div>}>
+        <LoginForm />
+      </Suspense>
+    </div>
   );
 }
