@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -28,9 +29,18 @@ public class StockController {
         this.stockService = stockService;
     }
 
+    @GetMapping({"/admin/inventory/summary", "/inventory/summary"})
+    @PreAuthorize("hasAnyRole('ADMIN', 'SERVICE')")
+    InventorySummaryResponse getSummary() {
+        return stockService.getSummary();
+    }
+
     @GetMapping("/inventory")
-    Page<InventoryItemResponse> findAll(@PageableDefault(size = 20, sort = "createdAt") Pageable pageable) {
-        return stockService.findAll(pageable);
+    Page<InventoryItemResponse> findAll(
+            @RequestParam(required = false) String q,
+            @RequestParam(required = false) InventoryStatus stockStatus,
+            @PageableDefault(size = 20, sort = "createdAt") Pageable pageable) {
+        return stockService.findAll(q, stockStatus, pageable);
     }
 
     @GetMapping("/inventory/{productId}")
@@ -40,8 +50,11 @@ public class StockController {
 
     @GetMapping("/admin/inventory")
     @PreAuthorize("hasRole('ADMIN')")
-    Page<InventoryItemResponse> adminFindAll(@PageableDefault(size = 20, sort = "createdAt") Pageable pageable) {
-        return stockService.findAll(pageable);
+    Page<InventoryItemResponse> adminFindAll(
+            @RequestParam(required = false) String q,
+            @RequestParam(required = false) InventoryStatus stockStatus,
+            @PageableDefault(size = 20, sort = "createdAt") Pageable pageable) {
+        return stockService.findAll(q, stockStatus, pageable);
     }
 
     @GetMapping("/admin/inventory/{productId}")
@@ -49,6 +62,7 @@ public class StockController {
     InventoryItemResponse adminFindByProductId(@PathVariable UUID productId) {
         return stockService.findByProductId(productId);
     }
+
 
     @PostMapping("/admin/inventory")
     @PreAuthorize("hasRole('ADMIN')")
@@ -64,7 +78,29 @@ public class StockController {
     }
 
     @PatchMapping("/inventory/{productId}/stock")
+    @PreAuthorize("hasAnyRole('ADMIN', 'SERVICE')")
     InventoryItemResponse adjustStockInternal(@PathVariable UUID productId, @Valid @RequestBody AdjustStockRequest request) {
         return stockService.adjustStock(productId, request.quantityDelta());
+    }
+
+    @PatchMapping("/admin/inventory/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
+    InventoryItemResponse updateItemById(@PathVariable UUID id, @RequestBody UpdateInventoryItemRequest request) {
+        return stockService.updateItemById(id, request);
+    }
+
+    @PostMapping("/admin/inventory/bulk-update")
+    @PreAuthorize("hasRole('ADMIN')")
+    ResponseEntity<Void> bulkUpdate(@RequestBody java.util.List<BulkUpdateItemRequest> requests) {
+        stockService.bulkUpdate(requests);
+        return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping(value = "/admin/inventory/export", produces = "text/csv")
+    @PreAuthorize("hasRole('ADMIN')")
+    ResponseEntity<String> exportCsv() {
+        return ResponseEntity.ok()
+                .header("Content-Disposition", "attachment; filename=inventory.csv")
+                .body(stockService.exportCsv());
     }
 }
