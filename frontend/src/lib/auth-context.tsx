@@ -9,11 +9,13 @@ import {
 } from "react";
 import {
   authApi,
+  cartApi,
   clearSession,
   getToken,
   setToken,
   setUnauthorizedHandler,
 } from "@/lib/api";
+import { getPendingCartItem, clearPendingCartItem } from "@/lib/pending-cart";
 import type { AuthResponse, LoginRequest, RegisterRequest } from "@/lib/types";
 
 interface AuthContextValue {
@@ -45,7 +47,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const token = getToken();
       const raw = localStorage.getItem(USER_KEY);
       if (token && raw) {
-        // eslint-disable-next-line react-hooks/set-state-in-effect
+         
         setUser(JSON.parse(raw) as AuthContextValue["user"]);
       }
     } catch {
@@ -84,11 +86,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Tự gọi /login để lấy JWT thật — nếu không có token, FE không thể gọi
     // API nào cần Authorization sau đó.
     if (!res.token) {
-      const loginRes = await authApi.login({
-        username: req.username,
-        password: req.password,
-      });
-      persist(loginRes);
+      try {
+        const loginRes = await authApi.login({
+          username: req.username,
+          password: req.password,
+        });
+        persist(loginRes);
+      } catch {
+        // Tài khoản yêu cầu xác thực email trước khi đăng nhập
+      }
     } else {
       persist(res);
     }
@@ -96,7 +102,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   function persist(res: AuthResponse) {
     if (!res.token) {
-      // Không persist nếu không có token — tránh ghi đè session cũ bằng null
       throw new Error("Phiên đăng nhập không hợp lệ: token rỗng từ backend");
     }
     setToken(res.token);
@@ -104,6 +109,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     void omit;
     setUser(rest);
     localStorage.setItem(USER_KEY, JSON.stringify(rest));
+
+    // Tự động thêm sản phẩm còn chờ (guest đã nhấn giỏ trước khi đăng nhập)
+    const pending = getPendingCartItem();
+    if (pending && res.token) {
+      clearPendingCartItem();
+      // Gọi cart API với token vừa lưu (setToken đã chạy ở trên)
+      cartApi
+        .addItem({ productId: pending.productId, quantity: pending.quantity })
+        .then(() => {
+          // Import dynamic để tránh circular dep; toast là module độc lập
+          import("@/lib/toast").then(({ toast }) => {
+            toast.success({
+              title: "Đã thêm vào giỏ hàng",
+              description: pending.productName
+                ? `${pending.productName} × ${pending.quantity} đã được thêm vào giỏ.`
+                : `Số lượng: ${pending.quantity}`,
+            });
+          });
+        })
+        .catch(() => {
+          // Thất bại im lặng — không block luồng đăng nhập
+        });
+    }
   }
 
   function logout() {
