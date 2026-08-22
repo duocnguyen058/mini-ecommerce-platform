@@ -84,48 +84,48 @@ public class InventoryClient {
         }
     }
 
-    // ---------- Confirm ----------
+    // ---------- Confirm By Order ID ----------
 
     @CircuitBreaker(name = "inventoryClient")
     @Retry(name = "inventoryClient")
-    public void confirm(UUID reservationId) {
+    public void confirmByOrderId(UUID orderId) {
         try {
             inventoryRestClient.post()
-                    .uri("/api/inventory/reservations/{id}/confirm", reservationId)
+                    .uri("/api/inventory/orders/{orderId}/confirm", orderId)
                     .retrieve()
                     .onStatus(status -> status.isError(), (req, res) -> {
                         throw new RemoteServiceException(
-                                "inventory-service confirm lỗi " + res.getStatusCode().value(),
+                                "inventory-service confirmByOrderId lỗi " + res.getStatusCode().value(),
                                 res.getStatusCode().value());
                     })
                     .toBodilessEntity();
         }
         catch (HttpClientErrorException ex) {
             throw new RemoteServiceException(
-                    "inventory-service confirm lỗi " + ex.getStatusCode().value(),
+                    "inventory-service confirmByOrderId lỗi " + ex.getStatusCode().value(),
                     ex.getStatusCode().value());
         }
     }
 
-    // ---------- Cancel ----------
+    // ---------- Cancel By Order ID ----------
 
     @CircuitBreaker(name = "inventoryClient")
     @Retry(name = "inventoryClient")
-    public void cancel(UUID reservationId) {
+    public void cancelByOrderId(UUID orderId) {
         try {
             inventoryRestClient.post()
-                    .uri("/api/inventory/reservations/{id}/cancel", reservationId)
+                    .uri("/api/inventory/orders/{orderId}/cancel", orderId)
                     .retrieve()
                     .onStatus(status -> status.isError(), (req, res) -> {
                         throw new RemoteServiceException(
-                                "inventory-service cancel lỗi " + res.getStatusCode().value(),
+                                "inventory-service cancelByOrderId lỗi " + res.getStatusCode().value(),
                                 res.getStatusCode().value());
                     })
                     .toBodilessEntity();
         }
         catch (HttpClientErrorException ex) {
             throw new RemoteServiceException(
-                    "inventory-service cancel lỗi " + ex.getStatusCode().value(),
+                    "inventory-service cancelByOrderId lỗi " + ex.getStatusCode().value(),
                     ex.getStatusCode().value());
         }
     }
